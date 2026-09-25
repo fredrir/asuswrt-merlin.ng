@@ -84,7 +84,7 @@
 +++ b/release/src/router/extendno.conf
 @@ -1 +1 @@
 -EXTENDNO=58138-rtbe90u-dev1
-+EXTENDNO=58138-rtbe90u-dev2-vpn
++EXTENDNO=58138-rtbe90u-dev3-vpn
 --- a/release/src/router/httpd/Makefile
 +++ b/release/src/router/httpd/Makefile
 @@ -240,8 +240,8 @@
@@ -1252,3 +1252,27 @@
  								<div class="icon_eye_close" id="show_pass_1" type="password"  onclick="pass_checked($('#show_pass_1'));"></div>
  							</div>
  						</td>
+--- a/buildtools/target.mak.3004
++++ b/buildtools/target.mak.3004
+@@ -1177,7 +1177,7 @@
+ #	QCN6274
+ # Valid option for SWITCH_CHIP are shown below:
+ #	QCA8386
+-export TUF-BE6500 := BUILD_NAME="TUF-BE6500" TUFBE6500=y IPV6SUPP=y HTTPS=y SECURE_BY_DEFAULT=y ECC256=y QCA=y IPQ53XX=y MUSL64=y BBEXTRAS=y USBEXTRAS=y EBTABLES=y AUTODICT=y NVRAM_SIZE=0x20000 NVRAM_ENCRYPT=1 ODMPID=y UBI=y DUAL_TRX=y EMAIL=y FRS_FEEDBACK=y SYSSTATE=y MDNS=y DUMP_OOPS_MSG=y DEBUGFS=y SSH=y REBOOT_SCHEDULE=y OPTIMIZE_XBOX=y FINDASUS=y NETOOL=y TRACEROUTE=y STAINFO=y HD_SPINDOWN=y ASD=y AHS=y FRS_LIVE_UPDATE=y FORCE_AUTO_UPGRADE=y EXTEND_LIMIT=y ASUSCTRL=y COBRAND=y DOWNGRADE_CHECK=y \
++export TUF-BE6500 := BUILD_NAME="TUF-BE6500" TUFBE6500=y VPN_FUSION_MERLIN=y IPV6SUPP=y HTTPS=y SECURE_BY_DEFAULT=y ECC256=y QCA=y IPQ53XX=y MUSL64=y BBEXTRAS=y USBEXTRAS=y EBTABLES=y AUTODICT=y NVRAM_SIZE=0x20000 NVRAM_ENCRYPT=1 ODMPID=y UBI=y DUAL_TRX=y EMAIL=y FRS_FEEDBACK=y SYSSTATE=y MDNS=y DUMP_OOPS_MSG=y DEBUGFS=y SSH=y REBOOT_SCHEDULE=y OPTIMIZE_XBOX=y FINDASUS=y NETOOL=y TRACEROUTE=y STAINFO=y HD_SPINDOWN=y ASD=y AHS=y FRS_LIVE_UPDATE=y FORCE_AUTO_UPGRADE=y EXTEND_LIMIT=y ASUSCTRL=y COBRAND=y DOWNGRADE_CHECK=y \
+ 	ACCEL_PPTPD=y OPENVPN=y VPNC=y VPN_FUSION=y WIREGUARD=y IPSEC=STRONGSWAN IPSEC_SRVCLI_ONLY=SRV INSTANT_GUARD=y \
+ 	BWDPI=y WTFAST=n WTFAST_V2=y OOKLA=y WL_SCHED_V3=y GAME_MODE=y OPEN_NAT=y UUPLUGIN=y GEARUPPLUGIN=y IPERF3=y \
+ 	LETSENCRYPT=y RT_TUF_UI=y PARENTAL2=y PC_SCHED_V3=y \
+--- a/release/src/router/rc/openvpn.c
++++ b/release/src/router/rc/openvpn.c
+@@ -19,6 +19,10 @@
+ /* RC OpenVPN code for Asuswrt-Merlin. */
+ 
+ #include "rc.h"
++
++#ifndef RTCONFIG_VPN_FUSION_MERLIN
++#error "RT-BE90U VPN variant requires RTCONFIG_VPN_FUSION_MERLIN"
++#endif
+ 
+ #include <sys/types.h>
+ #include <sys/wait.h>

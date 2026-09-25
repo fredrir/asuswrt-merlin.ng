@@ -10,6 +10,7 @@ cp /usr/bin/qemu-aarch64-static "$test_dir/root/qemu-aarch64-static"
 mkdir -p "$test_dir/root/tmp" "$test_dir/root/jffs/openvpn"
 /opt/openwrt-gcc750_musl1124.aarch64/bin/aarch64-openwrt-linux-musl-gcc \
 	-Wall -Wextra -Werror -Wl,-E \
+	-I/work/release/src/router/shared \
 	-I/work/release/src/router/libovpn /tests/vpn-config-test.c \
 	-L/firmware/usr/lib -Wl,-rpath-link,/firmware/usr/lib:/firmware/lib -lovpn \
 	-o "$test_dir/root/tmp/vpn-config-test"

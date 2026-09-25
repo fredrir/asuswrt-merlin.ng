@@ -12,6 +12,8 @@
 | Device-tree model | `Qualcomm Technologies, Inc. IPQ5332/ASUS-BE6500` |
 | Device-tree compatible | `qcom,ipq5332-asus-be6500`, `qcom,ipq5332` |
 | Installed firmware | `3.0.0.6.102_58500-g482542d_1264-g48728_Q7MB` |
+| VPN settings inspected | No VPN Fusion profiles or device policies; all four SDNs use WAN (`vpnc_idx=0`) |
+| Entware storage inspected | No USB filesystem mounted; `/opt` points to `/tmp/opt`; no `opkg` installed |
 | Kernel | `5.4.277` |
 | Kernel compiler | GCC `7.5.0`, OpenWrt `r0+12834-6a10c44cf508` |
 | UBI volumes | `nvram`, `Factory`, `Factory2`, `linux`, `linux2`, `jffs2` |
@@ -36,6 +38,7 @@ The collector reads selected model/firmware NVRAM keys and hardware metadata. It
 | Verified SHA-256 | `930142d207b1f9dfc11e2ad17c767abc59a5df5777223dfc99f12a69f1d07b9e` |
 | Platform | `release/src-qca-ipq53xx` |
 | Stock build target | `make tuf-be6500`; `TUF-BE9400` inherits this profile |
+| Effective target definitions | `buildtools/target.mak.3004`; selected ahead of `release/src-rt/target.mak` by the SDK Makefile |
 | Alternative image name | `TUF-BE9400`, set by `platform.mak` |
 | Target settings | `QCA=y IPQ53XX=y MUSL64=y ODMPID=y UBI=y DUAL_TRX=y` |
 | Radio / switch profile | `QCN6274` / `QCA8386` |
@@ -233,9 +236,11 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Status | Build and offline testing only; not ready to flash |
 | Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
 | Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
-| Version | `58138-rtbe90u-dev2-vpn` |
-| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev2-vpn.trx`; 59,006,825 bytes |
-| SHA-256 | `5a9d1a486cd3e7de155300886afb5220b36afaccb6bc1d633e303b6492a59ffb` |
+| Version | `58138-rtbe90u-dev3-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev3-vpn.trx`; 59,008,093 bytes |
+| SHA-256 | `de4d88cd236b6ba75ffca941d262fb9de2c4eb97c3e4a77643b602352efb6a56` |
+| Superseded build | `dev2-vpn` omitted `RTCONFIG_VPN_FUSION_MERLIN` because the SDK selected a different target file; its library tests did not establish the routing build configuration |
+| Configuration guard | Both target files enable Merlin VPN integration; compilation and ARM tests reject configurations without that switch |
 | Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
 | Engine | Merlin `libovpn`; coordinated `rc`, HTTP and shared-library changes |
 | Networking | Merlin VPN profile mapping, named routing tables, DNS integration, WireGuard routing and VPNDirector service handling |
@@ -244,10 +249,12 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Credential compatibility | Retains the ASUS 256-byte password field; certificate names and private-file permissions tested |
 | Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
 | ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
-| Reproduction check | All 54 tracked source inputs match freshly prepared sources byte for byte |
-| Clean build | `logs/vpn-clean-build.log` on `archie`; exited 0. Final password-field correction rebuilt in `logs/vpn-final-build.log` |
+| Source integrity | All 55 source inputs match the preparation manifest after the clean build, including the SDK's active target file |
+| Clean build | `logs/vpn-dev3-build.log` on `archie`; exited 0 |
+| Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector disassembly returns disabled |
+| Regression check | ARM test rejects the superseded `dev2-vpn` configuration |
 | Artifact checks | Both CRCs valid; fits observed UBI volume; no missing libraries or required symbols; all runtime ELF files AArch64; Qualcomm coprocessor firmware unchanged |
-| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-repro-58138` and `image-audit-vpn-release` on `archie`; results in `logs/vpn-release-*` |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev3-58138` and `image-audit-vpn-dev3` on `archie`; results in `logs/vpn-dev3-*` |
 | Remaining work | Stock VPN Fusion/SDN settings migration; browser tests; route, DNS-leak and kill-switch tests; add-on APIs; hardware validation |
 
 The supplied Merlin checkout must contain commit `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`.

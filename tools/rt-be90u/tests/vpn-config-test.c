@@ -5,8 +5,13 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <rtconfig.h>
 #include <openvpn_config.h>
 #include <amvpn_routing.h>
+
+#if !defined(RTCONFIG_SOC_IPQ53XX) || !defined(RTCONFIG_VPN_FUSION_MERLIN)
+#error "Test requires the RT-BE90U Merlin VPN build configuration"
+#endif
 
 /* An empty defaults table; only the terminating name is read by reset. */
 const char *router_defaults[] = { NULL };
