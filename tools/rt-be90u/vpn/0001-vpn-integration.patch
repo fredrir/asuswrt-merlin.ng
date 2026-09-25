@@ -1,0 +1,1254 @@
+--- a/release/src-rt/Makefile
++++ b/release/src-rt/Makefile
+@@ -3937,6 +3937,9 @@
+ 	if [ "$(VPN_FUSION)" = "y" ]; then \
+ 		sed -i "/RTCONFIG_VPN_FUSION/d" $(1); \
+ 		echo "RTCONFIG_VPN_FUSION=y" >>$(1); \
++		if [ "$(VPN_FUSION_MERLIN)" = "y" ]; then \
++			echo "RTCONFIG_VPN_FUSION_MERLIN=y" >>$(1); \
++		fi; \
+ 		if [ "$(MTLANCFG)" = "y" ]; then \
+ 			sed -i "/RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE/d" $(1); \
+ 			echo "RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE=y" >>$(1); \
+@@ -3948,6 +3951,9 @@
+ 	if [ "$(VPN_FUSION_V2)" = "y" ]; then \
+ 		sed -i "/RTCONFIG_VPN_FUSION/d" $(1); \
+ 		echo "RTCONFIG_VPN_FUSION=y" >>$(1); \
++		if [ "$(VPN_FUSION_MERLIN)" = "y" ]; then \
++			echo "RTCONFIG_VPN_FUSION_MERLIN=y" >>$(1); \
++		fi; \
+ 		sed -i "/RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE/d" $(1); \
+ 		echo "RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE=y" >>$(1); \
+ 	fi;
+@@ -4839,6 +4845,9 @@
+ 		echo "RTCONFIG_INSTANT_GUARD=y" >>$(1); \
+ 		sed -i "/RTCONFIG_VPN_FUSION/d" $(1); \
+ 		echo "RTCONFIG_VPN_FUSION=y" >>$(1); \
++		if [ "$(VPN_FUSION_MERLIN)" = "y" ]; then \
++			echo "RTCONFIG_VPN_FUSION_MERLIN=y" >>$(1); \
++		fi; \
+ 		sed -i "/RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE/d" $(1); \
+ 		echo "RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE=y" >>$(1); \
+ 		sed -i "/CONFIG_PPP_MPPE/d" $(1); \
+--- a/release/src-rt/target.mak
++++ b/release/src-rt/target.mak
+@@ -1177,7 +1177,7 @@
+ #	QCN6274
+ # Valid option for SWITCH_CHIP are shown below:
+ #	QCA8386
+-export TUF-BE6500 := BUILD_NAME="TUF-BE6500" TUFBE6500=y IPV6SUPP=y HTTPS=y SECURE_BY_DEFAULT=y ECC256=y QCA=y IPQ53XX=y MUSL64=y BBEXTRAS=y USBEXTRAS=y EBTABLES=y AUTODICT=y NVRAM_SIZE=0x20000 NVRAM_ENCRYPT=1 ODMPID=y UBI=y DUAL_TRX=y EMAIL=y FRS_FEEDBACK=y SYSSTATE=y MDNS=y DUMP_OOPS_MSG=y DEBUGFS=y SSH=y REBOOT_SCHEDULE=y OPTIMIZE_XBOX=y FINDASUS=y NETOOL=y TRACEROUTE=y STAINFO=y HD_SPINDOWN=y ASD=y AHS=y FRS_LIVE_UPDATE=y FORCE_AUTO_UPGRADE=y EXTEND_LIMIT=y ASUSCTRL=y COBRAND=y DOWNGRADE_CHECK=y \
++export TUF-BE6500 := BUILD_NAME="TUF-BE6500" TUFBE6500=y VPN_FUSION_MERLIN=y IPV6SUPP=y HTTPS=y SECURE_BY_DEFAULT=y ECC256=y QCA=y IPQ53XX=y MUSL64=y BBEXTRAS=y USBEXTRAS=y EBTABLES=y AUTODICT=y NVRAM_SIZE=0x20000 NVRAM_ENCRYPT=1 ODMPID=y UBI=y DUAL_TRX=y EMAIL=y FRS_FEEDBACK=y SYSSTATE=y MDNS=y DUMP_OOPS_MSG=y DEBUGFS=y SSH=y REBOOT_SCHEDULE=y OPTIMIZE_XBOX=y FINDASUS=y NETOOL=y TRACEROUTE=y STAINFO=y HD_SPINDOWN=y ASD=y AHS=y FRS_LIVE_UPDATE=y FORCE_AUTO_UPGRADE=y EXTEND_LIMIT=y ASUSCTRL=y COBRAND=y DOWNGRADE_CHECK=y \
+ 	ACCEL_PPTPD=y OPENVPN=y VPNC=y VPN_FUSION=y WIREGUARD=y IPSEC=STRONGSWAN IPSEC_SRVCLI_ONLY=SRV INSTANT_GUARD=y \
+ 	BWDPI=y WTFAST=n WTFAST_V2=y OOKLA=y WL_SCHED_V3=y GAME_MODE=y OPEN_NAT=y UUPLUGIN=y GEARUPPLUGIN=y IPERF3=y \
+ 	LETSENCRYPT=y RT_TUF_UI=y PARENTAL2=y PC_SCHED_V3=y \
+--- a/release/src/router/Makefile
++++ b/release/src/router/Makefile
+@@ -1129,7 +1129,7 @@
+ obj-$(RTCONFIG_ASD) += jq-1.7.1
+ 
+ obj-$(RTCONFIG_OPENVPN) += openssl
+-obj-$(RTCONFIG_OPENVPN) += libvpn
++obj-$(RTCONFIG_OPENVPN) += libovpn
+ 
+ obj-y += rc
+ obj-y += rom
+@@ -3871,7 +3871,7 @@
+ endif
+ 
+ 
+-rc: shared libev-4.33 $(if $(BCM_502L07P2),ethctl_lib) nvram$(BCMEX)$(EX7) libdisk $(if $(RTCONFIG_LIB_CODB),libcodb) $(if $(RTCONFIG_FBWIFI),fb_wifi) $(if $(RTCONFIG_QTN),libqcsapi_client) $(if $(CONFIG_LIBBCM),libbcm) $(if $(RTCONFIG_BWDPI),bwdpi_source) $(if $(RTCONFIG_USB_SMS_MODEM),smspdu) $(if $(RTCONFIG_OPENVPN),libvpn) $(if $(RTCONFIG_LANTIQ),libfapi-0.1) $(if $(RTCONFIG_CFGSYNC), $(CFGSYNC_PKG) $(if $(RTCONFIG_AMAS), amas-utils) $(if $(RTCONFIG_LANTIQ),hostapd-2.6)) json-c $(if $(or $(RTCONFIG_FRS_LIVE_UPDATE),$(RTCONFIG_FRS_FEEDBACK),$(RTCONFIG_URLFW),$(RTCONFIG_SOFTWIRE46)), curl) $(RC_EXT_PKG) $(if $(RTCONFIG_BRCM_HOSTAPD),wpa_supplicant-2.7) $(if $(RTCONFIG_MXL371X),mxl371x_sdk) $(if $(RTCONFIG_IP808AR),pse_lib) libwebapi
++rc: shared libev-4.33 $(if $(BCM_502L07P2),ethctl_lib) nvram$(BCMEX)$(EX7) libdisk $(if $(RTCONFIG_LIB_CODB),libcodb) $(if $(RTCONFIG_FBWIFI),fb_wifi) $(if $(RTCONFIG_QTN),libqcsapi_client) $(if $(CONFIG_LIBBCM),libbcm) $(if $(RTCONFIG_BWDPI),bwdpi_source) $(if $(RTCONFIG_USB_SMS_MODEM),smspdu) $(if $(RTCONFIG_OPENVPN),libovpn) $(if $(RTCONFIG_LANTIQ),libfapi-0.1) $(if $(RTCONFIG_CFGSYNC), $(CFGSYNC_PKG) $(if $(RTCONFIG_AMAS), amas-utils) $(if $(RTCONFIG_LANTIQ),hostapd-2.6)) json-c $(if $(or $(RTCONFIG_FRS_LIVE_UPDATE),$(RTCONFIG_FRS_FEEDBACK),$(RTCONFIG_URLFW),$(RTCONFIG_SOFTWIRE46)), curl) $(RC_EXT_PKG) $(if $(RTCONFIG_BRCM_HOSTAPD),wpa_supplicant-2.7) $(if $(RTCONFIG_MXL371X),mxl371x_sdk) $(if $(RTCONFIG_IP808AR),pse_lib) libwebapi
+ 
+ rc-install:
+ 	$(MAKE) -C rc INSTALLDIR=$(INSTALLDIR)/rc install
+@@ -11130,3 +11130,7 @@
+ .PHONY: dummy libnet libpcap
+ 
+ 
++
++.PHONY: libovpn
++libovpn: shared openssl
++	$(MAKE) -C libovpn
+--- a/release/src/router/config/config.in
++++ b/release/src/router/config/config.in
+@@ -3438,3 +3438,8 @@
+ config RTCONFIG_EXTEND_MTK_RFB_CONFIG
+ 	bool "extend parameters that is not set from mt799X.bY.dat to bandY.dat"
+ 	default n
++
++config RTCONFIG_VPN_FUSION_MERLIN
++	bool "Merlin VPN Fusion integration"
++	depends on RTCONFIG_VPN_FUSION
++	default n
+--- a/release/src/router/extendno.conf
++++ b/release/src/router/extendno.conf
+@@ -1 +1 @@
+-EXTENDNO=58138-rtbe90u-dev1
++EXTENDNO=58138-rtbe90u-dev2-vpn
+--- a/release/src/router/httpd/Makefile
++++ b/release/src/router/httpd/Makefile
+@@ -240,8 +240,8 @@
+ endif
+ 
+ ifeq ($(RTCONFIG_OPENVPN),y)
+-CFLAGS += -I$(TOP)/libvpn
+-LIBS += -L$(TOP)/libvpn -lvpn
++CFLAGS += -I$(TOP)/libovpn
++LIBS += -L$(TOP)/libovpn -lovpn
+ LIBS += -L$(TOP)/openssl -lssl -lcrypto -ldl
+ endif
+ 
+--- a/release/src/router/httpd/web.c
++++ b/release/src/router/httpd/web.c
+@@ -111,6 +111,7 @@
+ #ifdef RTCONFIG_OPENVPN
+ #include "openvpn_options.h"
+ #include "openvpn_config.h"
++#include <amvpn_routing.h>
+ #endif
+ 
+ #include <net/if.h>
+@@ -1355,6 +1356,8 @@
+ {
+ 	char *name, *c;
+ 	int ret = 0;
++	int unit;
++	char buffer[4096];
+ 
+ 	if (ejArgs(argc, argv, "%s", &name) < 1) {
+ 		if(hook_get_json == 1)
+@@ -1363,16 +1366,29 @@
+ 			websError(wp, 400, "Insufficient args\n");
+ 		return -1;
+ 	}
+-
+ 	if(hook_get_json == 1)
+ 		websWrite(wp, "\"");
+-	for (c = nvram_safe_get(name); *c; c++) {
++
++	if (!strcmp(name, "vpn_client_custom3")) {
++		unit = nvram_get_int("vpn_client_unit");
++		c = get_ovpn_custom(OVPN_TYPE_CLIENT, unit, buffer, sizeof (buffer));
++	}
++	else if (!strcmp(name, "vpn_server_custom3")) {
++		unit = nvram_get_int("vpn_server_unit");
++		c = get_ovpn_custom(OVPN_TYPE_SERVER, unit, buffer, sizeof (buffer));
++	}
++	else
++		c = nvram_safe_get(name);
++
++	while (*c) {
+ 		if (isprint(*c) &&
+ 			*c != '"' && *c != '&' && *c != '<' && *c != '>')
+ 				ret += websWrite(wp, "%c", *c);
+ 		else
+ 			ret += websWrite(wp, "&#%d;", *c);
+-	}
++		c++;
++	}
++
+ 	if(hook_get_json == 1)
+ 		websWrite(wp, "\"");
+ 
+@@ -1934,6 +1950,7 @@
+ static int
+ ej_nvram_char_to_ascii(int eid, webs_t wp, int argc, char_t **argv)
+ {
++	char policy_buffer[8000];
+ 	char *sid, *name;
+ 	char tmp[MAX_LINE_SIZE], name_tmp[50] = {0};
+ 	char *buf = tmp, *str;
+@@ -1954,7 +1971,10 @@
+ 
+ 	wl_nband_to_wlx(name, name_tmp, sizeof(name_tmp));
+ 
+-	str = nvram_safe_get_x(sid, name_tmp);
++	if (!strcmp(name, "vpndirector_rulelist"))
++		str = amvpn_get_policy_rules(-1, policy_buffer, sizeof(policy_buffer), VPNDIR_PROTO_NONE);
++	else
++		str = nvram_safe_get_x(sid, name_tmp);
+ 
+ #if defined(RTCONFIG_NVRAM_ENCRYPT)
+ 	if(strcmp(name, "pptpd_clientlist") == 0 || strcmp(name, "vpn_serverx_clientlist") == 0){
+@@ -4769,7 +4789,11 @@
+ 				snprintf(prefix, sizeof(prefix), "vpn_server%d_", unit);
+ 				(void)strlcat_r(prefix, name+11, tmp, sizeof(tmp));
+ 
+-				if(strcmp(nvram_safe_get(tmp), value)) {
++				if (!strcmp(name, "vpn_server_custom3")) {
++					if (set_ovpn_custom(OVPN_TYPE_SERVER, unit, value) == 0)
++						nvram_modified = 1;
++				}
++				else if(strcmp(nvram_safe_get(tmp), value)) {
+ 					nvram_set(tmp, value);
+ 					nvram_modified = 1;
+ 					_dprintf("set %s=%s\n", tmp, value);
+@@ -4779,7 +4803,11 @@
+ 				snprintf(prefix, sizeof(prefix), "vpn_client%d_", unit);
+ 				(void)strlcat_r(prefix, name+11, tmp, sizeof(tmp));
+ 
+-				if(strcmp(nvram_safe_get(tmp), value)) {
++				if (!strcmp(name, "vpn_client_custom3")) {
++					if (set_ovpn_custom(OVPN_TYPE_CLIENT, unit, value) == 0)
++						nvram_modified = 1;
++				}
++				else if(strcmp(nvram_safe_get(tmp), value)) {
+ 					nvram_set(tmp, value);
+ 					nvram_modified = 1;
+ 					_dprintf("set %s=%s\n", tmp, value);
+@@ -4857,6 +4885,9 @@
+ 					nvram_modified = 1;
+ 					_dprintf("set %s=%s\n", tmp, value);
+ 				}
++			}
++			else if (!strcmp(name, "vpndirector_rulelist")) {
++				amvpn_set_policy_rules(value);
+ 			}
+ #endif
+ #ifdef RTCONFIG_DISK_MONITOR
+@@ -16955,7 +16986,7 @@
+ 		//websApply(stream, "OvpnChecking.asp");
+ 
+ 		if(!strcmp(filetype, "ovpn")) {
+-			reset_ovpn_setting(OVPN_TYPE_CLIENT, unit);
++			reset_ovpn_setting(OVPN_TYPE_CLIENT, unit, 0);
+ 			ret = read_config_file(VPN_CLIENT_UPLOAD, unit);
+ 			if (ret < 0)
+ 				nvram_set("vpn_upload_state", "err");
+--- a/release/src/router/libovpn/openvpn_config.c
++++ b/release/src/router/libovpn/openvpn_config.c
+@@ -398,7 +398,8 @@
+ 
+ 	datalen = f_read(filename, buffer, bufferlen-1);
+ 	if (datalen < 0) {
+-		buffer[0] = '\0';
++		snprintf(filename, sizeof(filename), "vpn_%s%d_custom", typeStr, unit);
++		strlcpy(buffer, nvram_safe_get(filename), bufferlen);
+ 	} else {
+ 		buffer[datalen] = '\0';
+ 	}
+--- a/release/src/router/libovpn/openvpn_config.h
++++ b/release/src/router/libovpn/openvpn_config.h
+@@ -125,7 +125,7 @@
+ 	int userauth;	//username, password
+ 	int useronly;	//client certificte not required
+ 	char username[64];
+-	char password[64];
++	char password[256];
+ 
+ //Data Channel Encryption Options:
+ 	int direction;	//key-direction of secret or tls-auth (hmac)
+--- a/release/src/router/libovpn/openvpn_control.c
++++ b/release/src/router/libovpn/openvpn_control.c
+@@ -473,25 +473,30 @@
+ }
+ 
+ 
+-void _ovpn_run_event_script() {
+-	ovpn_if_t type;
+-
+-	if (!strncmp(safe_getenv("dev"),"tun", 3))
+-		type = OVPN_IF_TUN;
+-	else if (!strncmp(safe_getenv("dev"),"tap", 3))
+-		type = OVPN_IF_TAP;
++void _ovpn_run_event_script(void)
++{
++	char *script = "/jffs/scripts/openvpn-event";
++	char *dev = safe_getenv("dev");
++	char *mtu;
++	struct stat st;
++
++	if (!nvram_match("jffs2_scripts", "1") || stat(script, &st) != 0)
++		return;
++	if (!(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
++		logmessage("custom_script", "openvpn-event is not executable");
++		return;
++	}
++	if (!strncmp(dev, "tun", 3))
++		mtu = safe_getenv("tun_mtu");
++	else if (!strncmp(dev, "tap", 3))
++		mtu = safe_getenv("tap_mtu");
+ 	else
+ 		return;
+ 
+-	if (f_exists("/jffs/scripts/openvpn-event")) {
+-		if (nvram_get_int("jffs2_scripts") == 0) {
+-			logmessage("custom_script", "Found openvpn-event, but custom script execution is disabled!");
+-		} else {
+-			eval("/jffs/scripts/openvpn-event", safe_getenv("dev"), (type == OVPN_IF_TUN ? safe_getenv("tun_mtu") : safe_getenv("tap_mtu")), safe_getenv("link_mtu"),
+-			      safe_getenv("ifconfig_local"), safe_getenv("ifconfig_remote"), safe_getenv("script_context"));
+-			logmessage("custom_script", "Running openvpn-event");
+-		}
+-	}
++	logmessage("custom_script", "Running openvpn-event");
++	eval(script, dev, mtu, safe_getenv("link_mtu"),
++		safe_getenv("ifconfig_local"), safe_getenv("ifconfig_remote"),
++		safe_getenv("script_context"));
+ }
+ 
+ void ovpn_start_client(int unit) {
+--- a/release/src/router/libovpn/openvpn_control.h
++++ b/release/src/router/libovpn/openvpn_control.h
+@@ -31,6 +31,10 @@
+ extern void stop_ovpn_serverall();
+ 
+ #ifdef RTCONFIG_MULTILAN_CFG
++extern void update_ovpn_client_by_sdn(MTLAN_T *pmtl, size_t mtl_sz, int restart_all_sdn);
++extern void update_ovpn_server_by_sdn(MTLAN_T *pmtl, size_t mtl_sz, int restart_all_sdn);
++extern void update_ovpn_client_by_sdn_remove(MTLAN_T *pmtl, size_t mtl_sz);
++extern void update_ovpn_server_by_sdn_remove(MTLAN_T *pmtl, size_t mtl_sz);
+ extern void _update_ovpn_by_sdn(MTLAN_T *pmtl, size_t mtl_sz, int restart_all_sdn, wg_type_t client);
+ extern void _update_ovpn_by_sdn_remove(MTLAN_T *pmtl, size_t mtl_sz, wg_type_t client);
+ extern void _ovpn_client_nf_bind_sdn(FILE* fp, const char* ovpn_ifname, const char* sdn_ifname);
+--- a/release/src/router/libovpn/openvpn_options.c
++++ b/release/src/router/libovpn/openvpn_options.c
+@@ -247,7 +247,7 @@
+ 	}
+ 	if (state != STATE_INITIAL)
+ 	{
+-		logmessage ("OVPN", "Options error: Residual parse state (%d) in %d", line_num);
++		logmessage ("OVPN", "Options error: Residual parse state in %d", line_num);
+ 		return 0;
+ 	}
+ 
+--- a/release/src/router/rc/Makefile
++++ b/release/src/router/rc/Makefile
+@@ -580,9 +580,9 @@
+ endif
+ ifeq ($(RTCONFIG_OPENVPN),y)
+ CFLAGS += -DRTCONFIG_CROND
+-CFLAGS += -I$(TOP)/libvpn
+-LDFLAGS += -L$(TOP)/libvpn -lvpn
+-OBJS += ovpn.o
++CFLAGS += -I$(TOP)/libovpn
++LDFLAGS += -L$(TOP)/libovpn -lovpn
++OBJS += openvpn.o ovpn-accounts.o
+ endif
+ 
+ ifeq ($(RTCONFIG_TPVPN),y)
+@@ -711,7 +711,7 @@
+ 
+ ifeq ($(RTCONFIG_VPNC),y)
+ ifeq ($(RTCONFIG_VPN_FUSION),y)
+-OBJS += vpnc_fusion.o
++OBJS += vpnc_fusion.o vpnc_legacy.o
+ else
+ OBJS += vpnc.o
+ endif
+--- a/release/src/router/rc/firewall.c
++++ b/release/src/router/rc/firewall.c
+@@ -9483,7 +9483,7 @@
+ #endif
+ 
+ #ifdef RTCONFIG_OPENVPN
+-	run_ovpn_fw_scripts();
++	ovpn_run_fw_scripts();
+ #endif
+ 
+ 	if (!nvram_get_int("ttl_inc_enable") && !nvram_get_int("ttl_spoof_enable")) {
+--- a/release/src/router/rc/openvpn.c
++++ b/release/src/router/rc/openvpn.c
+@@ -146,32 +146,32 @@
+ 
+ 
+ /* Wrappers for library functions */
+-void inline start_ovpn_eas() {
++void start_ovpn_eas() {
+ 	ovpn_process_eas(1);
+ }
+ 
+-void inline stop_ovpn_eas() {
++void stop_ovpn_eas() {
+ 	ovpn_process_eas(0);
+ }
+ 
+-void inline stop_ovpn_client(int unit) {
++void stop_ovpn_client(int unit) {
+ 	ovpn_stop_client(unit);
+ #ifdef RTCONFIG_MULTILAN_CFG
+ 	_vpnc_ipset_destroy( get_vpnc_idx_by_proto_unit(VPN_PROTO_OVPN, unit) );
+ #endif
+ }
+ 
+-void inline start_ovpn_client(int unit) {
++void start_ovpn_client(int unit) {
+ #ifdef RTCONFIG_MULTILAN_CFG
+ 	_vpnc_ipset_create( get_vpnc_idx_by_proto_unit(VPN_PROTO_OVPN, unit) );
+ #endif
+ 	ovpn_start_client(unit);
+ }
+ 
+-void inline stop_ovpn_server(int unit) {
++void stop_ovpn_server(int unit) {
+ 	ovpn_stop_server(unit);
+ }
+ 
+-void inline start_ovpn_server(int unit) {
++void start_ovpn_server(int unit) {
+ 	ovpn_start_server(unit);
+ }
+--- a/release/src/router/rc/ovpn-accounts.c
++++ b/release/src/router/rc/ovpn-accounts.c
+@@ -111,3 +111,8 @@
+ 	chmod("/etc/passwd.openvpn", 0644);
+ }
+ 
++
++void run_ovpn_event_script(void)
++{
++	_ovpn_run_event_script();
++}
+--- a/release/src/router/rc/rc.h
++++ b/release/src/router/rc/rc.h
+@@ -76,6 +76,33 @@
+ #ifdef RTCONFIG_OPENVPN
+ #include "openvpn_config.h"
+ #include "openvpn_control.h"
++#include <openvpn_setup.h>
++#include <amvpn_routing.h>
++extern void create_ovpn_passwd(void);
++extern int legacy_start_vpnc(void);
++extern void legacy_stop_vpnc(void);
++extern int legacy_vpnc_ipup_main(int argc, char **argv);
++extern int legacy_vpnc_ipdown_main(int argc, char **argv);
++extern int legacy_vpnc_ippreup_main(int argc, char **argv);
++extern int legacy_vpnc_authfail_main(int argc, char **argv);
++extern void legacy_vpnc_add_firewall_rule(void);
++extern void legacy_update_vpnc_state(char *prefix, int state, int reason);
++
++extern void vpnc_ovpn_set_dns(int unit);
++extern void ovpn_up_handler(void);
++extern void ovpn_down_handler(void);
++extern void ovpn_route_up_handler(void);
++extern void ovpn_route_pre_down_handler(void);
++extern void start_ovpn_client(int unit);
++extern void stop_ovpn_client(int unit);
++extern void start_ovpn_server(int unit);
++extern void stop_ovpn_server(int unit);
++extern void start_ovpn_eas(void);
++extern void stop_ovpn_eas(void);
++extern int _gen_vpnc_resolv_conf(int vpnc_idx);
++extern void _vpnc_ipset_create(int vpnc_idx);
++extern void _vpnc_ipset_destroy(int vpnc_idx);
++
+ #endif
+ 
+ #ifdef RTCONFIG_PARENTALCTRL
+@@ -1912,7 +1939,7 @@
+ extern char *get_virtual_subnet(char *nvram_name, char *output, int _size);
+ extern int ipsec_updown_main(int argc, char *argv[]);
+ extern void rc_ipsec_ctrl(int prof_type, int prof_idx, int enable);
+-#ifndef RTCONFIG_VPN_FUSION
++#if !defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN)
+ extern int write_ipc_resolv_dnsmasq(FILE* fp_servers);
+ #endif
+ extern void update_ipsec_s2sc_conf();
+--- a/release/src/router/rc/rc_ipsec.c
++++ b/release/src/router/rc/rc_ipsec.c
+@@ -3068,7 +3068,7 @@
+ 	return output;
+ }
+ 
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ static int _get_vpnc_idx_by_prof_idx(int prof_idx)
+ {
+ 	char *nv = NULL, *nvp = NULL, *b = NULL;
+@@ -3125,7 +3125,7 @@
+ 	char *dns4_1 = getenv("PLUTO_DNS4_1");
+ 	char *dns4_2 = getenv("PLUTO_DNS4_2");
+ 	FILE *fp;
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 	int vpnc_idx = 0;
+ 	char table_str[8] = {0};
+ #endif
+@@ -3160,7 +3160,7 @@
+ 			fprintf(fp, "iptables -t nat -A POSTROUTING -o %s ! -s %s -j MASQUERADE\n", vif, my_ip4);
+ 			fclose(fp);
+ 		}
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 		vpnc_idx = _get_vpnc_idx_by_prof_idx(unit);
+ 		if (vpnc_idx) {
+ 			snprintf(table_str, sizeof(table_str), "%d", IP_ROUTE_TABLE_ID_VPNC_BASE + vpnc_idx);
+@@ -3248,7 +3248,7 @@
+ 		// nat
+ 		eval("iptables", "-t", "nat", "-D", "POSTROUTING", "-o", vif, "!", "-s", my_ip4, "-j", "MASQUERADE");
+ 		eval("sed", "-i", "/MASQUERADE/d", FILE_PATH_IPSEC_IPTABLES_RULE);
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 		vpnc_idx = _get_vpnc_idx_by_prof_idx(unit);
+ 		if (vpnc_idx) {
+ 			// server route
+--- a/release/src/router/rc/sdn.c
++++ b/release/src/router/rc/sdn.c
+@@ -817,6 +817,10 @@
+ 
+ 		// TODO: TR-069 related.
+ 
++#ifdef RTCONFIG_OPENVPN
++		write_ovpn_client_dnsmasq_config(fp);
++#endif
++
+ 		// TODO: Set VPN server
+ 
+ 		snprintf(buf, sizeof(buf), "dnsmasq-%d.conf", pmtl->sdn_t.sdn_idx);
+@@ -1408,6 +1412,10 @@
+ 		else
+ 			snprintf(pref, sizeof(pref), "%d", IP_RULE_PREF_DEFAULT_CONN);
+ 		eval("ip", "rule", "add", "iif", (char*)pmtl->nw_t.ifname, "table", table, "pref", pref);
++		VPN_VPNX_T vpnx;
++		if (get_vpnx_by_vpnc_idx(&vpnx, pmtl->sdn_t.vpnc_idx) && vpnx.proto == VPN_PROTO_OVPN)
++			amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, vpnx.unit, (char *)pmtl->nw_t.ifname);
++
+ #ifdef RTCONFIG_IPV6
+ 		_remove_sdn_routing_rule(pmtl, 1);
+ #ifdef RTCONFIG_VPN_FUSION
+--- a/release/src/router/rc/services.c
++++ b/release/src/router/rc/services.c
+@@ -553,7 +553,7 @@
+ #if defined(RTCONFIG_HND_ROUTER_AX)
+ 			     " libwpa_client.so* libsqlite3.so.0*"
+ #endif
+-			     " libjson-c.so.2* libasc.so* libvpn.so*"
++			     " libjson-c.so.2* libasc.so* libovpn.so*"
+ #if defined(RTCONFIG_HNS)
+ 			     " libhns.so"
+ #endif
+@@ -708,7 +708,7 @@
+ 	}
+ #endif
+ #if defined(RTCONFIG_OPENVPN)
+-	__cp("", "/usr/lib", "libvpn.so", newroot);
++	__cp("", "/usr/lib", "libovpn.so", newroot);
+ 	if (nvram_match("VPNServer_enable", "1")) {
+ 		__cp("", "/usr/sbin", "openvpn", newroot);
+ 		__cp("", "/usr/lib", "libz.so* liblzo2.so* liblz4.so*", newroot);
+@@ -1104,7 +1104,7 @@
+ 		append_custom_config("passwd", fp);
+ 		fclose(fp);
+ #ifdef RTCONFIG_OPENVPN
+-		append_ovpn_accnt("/etc/passwd", "/etc/passwd.openvpn");
++		fappend_file("/etc/passwd", "/etc/passwd.openvpn");
+ #endif
+ 		run_postconf("passwd", "/etc/passwd");
+ 		chmod("/etc/passwd", 0644);
+@@ -20024,6 +20024,49 @@
+ 		if (action & RC_SERVICE_STOP) stop_ovpn_server(atoi(&script[9]));
+ 		if (action & RC_SERVICE_START) start_ovpn_server(atoi(&script[9]));
+ 	}
++	else if (strncmp(script, "vpnrouting" ,10) == 0) {
++		int unit, lock;
++
++		if (action & RC_SERVICE_START) {
++			if (strlen(script) >= 11)
++				unit = atoi(&script[10]);
++			else
++				unit = 0;
++
++			lock = file_lock(VPNROUTING_LOCK);
++			if (unit == 0) {
++				amvpn_set_wan_routing_rules();
++#ifdef RTCONFIG_WIREGUARD
++				for (i = WG_CLIENT_MAX; i > 0; i--) {
++					amvpn_set_killswitch_rules(VPNDIR_PROTO_WIREGUARD, i, NULL);
++					amvpn_set_routing_rules(i, VPNDIR_PROTO_WIREGUARD);
++					amvpn_clear_exclusive_dns(i, VPNDIR_PROTO_WIREGUARD);
++					wgc_set_exclusive_dns(i);
++				}
++#if defined(RTCONFIG_HND_ROUTER_AX_6756) || defined(RTCONFIG_BCM_502L07P2) || defined(RTCONFIG_HND_ROUTER_AX_675X)
++				amvpn_refresh_wg_bypass_rules();
++#endif
++#endif
++				for (i = OVPN_CLIENT_MAX; i > 0; i--) {
++					amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, i, NULL);
++					amvpn_set_routing_rules(i, VPNDIR_PROTO_OPENVPN);
++					amvpn_clear_exclusive_dns(i, VPNDIR_PROTO_OPENVPN);
++					ovpn_set_exclusive_dns(i);
++				}
++			} else {
++				// unit-specific only called for OpenVPN for now
++				// NOTE: doing it for a single WGC would mess with other bypass rules
++				amvpn_set_wan_routing_rules();
++				amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, unit, NULL);
++				amvpn_set_routing_rules(unit, VPNDIR_PROTO_OPENVPN);
++				amvpn_clear_exclusive_dns(unit, VPNDIR_PROTO_OPENVPN);
++				ovpn_set_exclusive_dns(unit);
++				// Refresh prerouting rules to ensure correct order
++				amvpn_update_exclusive_dns_rules();
++			}
++			file_unlock(lock);
++		}
++	}
+ #endif
+ #if defined(RTCONFIG_PPTPD) || defined(RTCONFIG_ACCEL_PPTPD)
+ 	else if (strcmp(script, "vpnd") == 0 || strcmp(script, "pptpd") == 0) {
+@@ -20060,6 +20103,16 @@
+ 			stop_dnsmasq(ALL_SDN);
+ #else
+ 			stop_dnsmasq();
++	else if (strcmp(script, "clearovpnserver") == 0)
++	{
++		if (cmd[1])
++			reset_ovpn_setting(OVPN_TYPE_SERVER, atoi(cmd[1]), 1);
++	}
++        else if (strcmp(script, "clearovpnclient") == 0)
++	{
++		if (cmd[1])
++			reset_ovpn_setting(OVPN_TYPE_CLIENT, atoi(cmd[1]), 1);
++	}
+ #endif
+ 		}
+ 		if (action & RC_SERVICE_START) {
+@@ -22475,7 +22528,7 @@
+ #endif
+ 
+ #ifdef RTCONFIG_OPENVPN
+-	run_ovpn_fw_nat_scripts();
++	ovpn_run_fw_nat_scripts();
+ #endif
+ #ifdef RTCONFIG_WIREGUARD
+ 	run_wgs_fw_nat_scripts();
+--- a/release/src/router/rc/sysdeps/init-qca.c
++++ b/release/src/router/rc/sysdeps/init-qca.c
+@@ -6093,6 +6093,11 @@
+ {
+ 	int act = nvram_get_int("qca_sfe");	/* -1/0/otherwise: ignore/remove ecm/load ecm */
+ 
++#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
++	/* Keep experimental VPN policy and kill-switch traffic in the Linux path. */
++	act = 0;
++#endif
++
+ 	/* Don't load ecm if NAT is not enabled. */
+ 	if (!is_nat_enabled())
+ 		act = 0;
+--- a/release/src/router/rc/wan.c
++++ b/release/src/router/rc/wan.c
+@@ -3062,6 +3062,10 @@
+ 		nvram_match(ipv6_nvname("ipv6_only"), "1"))
+ 		goto NOIP;
+ #endif
++
++#if defined(RTCONFIG_OPENVPN) && (!defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN))
++	write_ovpn_resolv_dnsmasq(fp_servers);
++#endif
+ 	{
+ 		for (unit = WAN_UNIT_FIRST; unit < WAN_UNIT_MAX; unit++) {
+ 			snprintf(prefix, sizeof(prefix), "wan%d_", unit);
+@@ -3074,7 +3078,7 @@
+ #ifdef RTCONFIG_DUALWAN
+ 			/* skip disconnected WANs in LB mode */
+ 			if (nvram_match("wans_mode", "lb")) {
+-				if (!is_phy_connect(unit))
++				if (!is_phy_connect2(unit))
+ 					continue;
+ 			} else
+ 			/* skip non-primary WANs except not fully connected in FB mode */
+@@ -3099,15 +3103,11 @@
+ 				if (dnspriv_enable)
+ 					break;
+ #endif
+-#if defined(RTCONFIG_OPENVPN) && !defined(RTCONFIG_VPN_FUSION)
+-				if (write_ovpn_resolv_dnsmasq(fp_servers))
+-					break;
+-#endif
+-#if defined(RTCONFIG_WIREGUARD) && !defined(RTCONFIG_VPN_FUSION)
+-				if (write_wgc_resolv_dnsmasq(fp_servers))
+-					break;
+-#endif
+-#if defined(RTCONFIG_IPSEC) && !defined(RTCONFIG_VPN_FUSION)
++//#if defined(RTCONFIG_WIREGUARD) && !defined(RTCONFIG_VPN_FUSION)
++//				if (write_wgc_resolv_dnsmasq(fp_servers))
++//					break;
++//#endif
++#if defined(RTCONFIG_IPSEC) && (!defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN))
+ 				if (write_ipc_resolv_dnsmasq(fp_servers))
+ 					break;
+ #endif
+@@ -3116,13 +3116,18 @@
+ 				if (nvram_match("wans_mode", "lb") && !*wan_dns)
+ 					break;
+ #endif
++#ifdef RTCONFIG_OPENVPN
++				/* We have a client with DNS set to Exclusive and routing set to All */
++				if (ovpn_skip_dnsmasq())
++					break;
++#endif
+ #if defined(RTCONFIG_MULTILAN_CFG) && defined(RTCONFIG_MULTIWAN_IF)
+ 				if (write_sdnlan_resolv_dnsmasq(fp_servers))
+ 					break;
+ #endif
+ 				foreach(tmp, (*wan_dns ? wan_dns : wan_xdns), next)
+ 				{
+- 					fprintf(fp_servers, "server=%s\n", tmp);
++					fprintf(fp_servers, "server=%s\n", tmp);
+ 				}
+ 			} while (0);
+ 
+@@ -3184,11 +3189,10 @@
+ 	}
+ #endif
+ #ifdef RTCONFIG_DNSPRIVACY
+-	if (dnspriv_enable) {
+-		fprintf(fp, "nameserver %s\n", "127.0.1.1");
++	if (dnspriv_enable)
+ 		fprintf(fp_servers, "server=%s\n", "127.0.1.1");
+-	}
+-#endif
++#endif
++
+ #if (defined(RTAX82_XD6) || defined(RTAX82_XD6S) || defined(XD6_V2) || defined(ET12))
+ NOIP:
+ #endif
+@@ -3274,15 +3278,24 @@
+ 
+ 	file_unlock(lock);
+ 
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 	if (is_vpnc_dns_active())
+ 		vpnc_update_resolvconf(nvram_get_int("vpnc_default_wan"));
+ #endif
+ 
++#ifdef RTCONFIG_OPENVPN
++	if (ovpn_need_dnsmasq_restart())
+ #ifdef RTCONFIG_MULTILAN_CFG
+-	reload_dnsmasq(LAN_IN_SDN_IDX);
++		start_dnsmasq(ALL_SDN);	// add strict-order
+ #else
+-	reload_dnsmasq();
++		start_dnsmasq();	// add strict-order
++#endif
++	else
++#endif
++#ifdef RTCONFIG_MULTILAN_CFG
++		reload_dnsmasq(LAN_IN_SDN_IDX);
++#else
++		reload_dnsmasq();
+ #endif
+ 	return 0;
+ 
+@@ -4333,7 +4346,7 @@
+ 	}
+ #endif
+ 
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 	vpnc_set_internet_policy(1);
+ #endif
+ 
+@@ -4413,13 +4426,13 @@
+ #endif
+ 
+ #ifdef RTCONFIG_OPENVPN
+-#ifndef RTCONFIG_VPN_FUSION
+-	start_ovpn_clientall();
++#if !defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN)
++	start_ovpn_eas();
+ #endif
+ 	start_ovpn_serverall();
+ #endif
+ #ifdef RTCONFIG_VPNC
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 	start_vpnc();
+ #else
+ 	if((nvram_match("vpnc_proto", "pptp") || nvram_match("vpnc_proto", "l2tp")) && nvram_match("vpnc_auto_conn", "1"))
+@@ -4436,7 +4449,7 @@
+ #endif
+ 
+ #ifdef RTCONFIG_WIREGUARD
+-#ifndef RTCONFIG_VPN_FUSION
++#if !defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 	stop_wgcall();
+ 	start_wgcall();
+ #endif
+@@ -4773,7 +4786,7 @@
+ #ifdef RTCONFIG_LANTIQ
+ 	disable_ppa_wan(wan_ifname);
+ #endif
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 	vpnc_set_internet_policy(0);
+ #endif
+ #ifdef RTCONFIG_MULTIWAN_IF
+@@ -5256,7 +5269,7 @@
+ 	symlink("/sbin/rc", "/tmp/ppp/vpnc-ip-down");
+ 	symlink("/sbin/rc", "/tmp/ppp/vpnc-ip-pre-up");
+ 	symlink("/sbin/rc", "/tmp/ppp/vpnc-auth-fail");
+-#ifdef RTCONFIG_VPN_FUSION
++#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
+ 	if(!d_exists("/etc/openvpn")) {
+ 		mkdir("/etc/openvpn", 0700);
+ 	}
+--- a/release/src/router/shared/Makefile
++++ b/release/src/router/shared/Makefile
+@@ -532,7 +532,7 @@
+ 
+ ifeq ($(or $(RTCONFIG_VPN_FUSION),$(RTCONFIG_TPVPN),$(RTCONFIG_IG_SITE2SITE),$(RTCONFIG_WIREGUARD)),y)
+ OBJS += vpn_utils.o
+-CFLAGS += -I$(TOP)/libvpn/
++CFLAGS += -I$(TOP)/libovpn/
+ endif
+ 
+ ifeq ($(OPDBG),y)
+--- a/release/src/router/shared/defaults.c
++++ b/release/src/router/shared/defaults.c
+@@ -13,6 +13,12 @@
+ 
+ #define XSTR(s) STR(s)
+ #define STR(s) #s
++
++#if defined(RTCONFIG_OPENVPN) && defined(HND_ROUTER) && !defined(HND_ROUTER_AX_675X)
++#define DEFAULT_NCP_CIPHERS "AES-256-GCM:AES-128-GCM:AES-256-CBC:AES-128-CBC:CHACHA20-POLY1305"
++#else
++#define DEFAULT_NCP_CIPHERS "CHACHA20-POLY1305:AES-128-GCM:AES-256-GCM:AES-128-CBC:AES-256-CBC"
++#endif
+ 
+ // stub for wlconf, etc.
+ struct nvram_tuple router_defaults[] = {
+@@ -4004,6 +4010,246 @@
+ #endif
+ 
+ #ifdef RTCONFIG_OPENVPN
++
++	{ "vpn_serverx_start", "", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT },	/* 0 */
++	{ "vpn_client_connretry", "15", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_username", "", CKN_STR64, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_password", "", CKN_STR256, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_username", "", CKN_STR64, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_password", "", CKN_STR256, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_username", "", CKN_STR64, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_password", "", CKN_STR256, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_username", "", CKN_STR64, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_password", "", CKN_STR256, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_username", "", CKN_STR64, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_password", "", CKN_STR256, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_if", "tun", CKN_STR4, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_bridge", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_nat", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_addr", "", CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_port", "1194", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_connretry", "15", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_rg", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_cipher", "default", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_local", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_remote", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_reneg", "-1", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_adns", "1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_rgw", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_gw", "", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_cn", "", CKN_STR255, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_tlsremote", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_userauth", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_useronly", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_if", "tun", CKN_STR4, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_bridge", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_nat", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_addr", "", CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_port", "1194", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_connretry", "15", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_rg", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_cipher", "default", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_local", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_remote", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_reneg", "-1", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_adns", "1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_rgw", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_gw", "", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_cn", "", CKN_STR255, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_tlsremote", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_userauth", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_useronly", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_if", "tun", CKN_STR4, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_bridge", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_nat", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_addr", "", CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_port", "1194", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_connretry", "15", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_rg", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_cipher", "default", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_local", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_remote", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_reneg", "-1", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_adns", "1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_rgw", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_gw", "", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_cn", "", CKN_STR255, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_tlsremote", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_userauth", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_useronly", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_if", "tun", CKN_STR4, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_bridge", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_nat", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_addr", "", CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_port", "1194", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_connretry", "15", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_rg", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_cipher", "default", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_local", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_remote", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_reneg", "-1", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_adns", "1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_rgw", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_gw", "", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_cn", "", CKN_STR255, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_tlsremote", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_userauth", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_useronly", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_if", "tun", CKN_STR4, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_bridge", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_nat", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_addr", "", CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_port", "1194", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_connretry", "15", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_rg", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_cipher", "default", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_local", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_remote", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_reneg", "-1", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_adns", "1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_rgw", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_gw", "", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_cn", "", CKN_STR255, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_tlsremote", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_userauth", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_useronly", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_if", "tun", CKN_STR4, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_port", "1194", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_cipher", "AES-128-CBC", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_dhcp", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_r1", "192.168.1.50", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_r2", "192.168.1.55", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_sn", "10.8.0.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_sn6", "fd00:ac68:1::/64", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_local", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_remote", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_local6", "", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_remote6", "", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_ccd", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_c2c", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_ccd_excl", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_ccd_val", "", CKN_STR2048, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_pdns", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_igncrt", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_tls_keysize", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_ip6", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_nat6", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_if", "tun", CKN_STR4, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_port", "1195", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_cipher", "AES-128-CBC", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_dhcp", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_r1", "192.168.1.50", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_r2", "192.168.1.55", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_sn6", "fd00:ac68:2::/64", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_sn", "10.16.0.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_local", "10.16.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_remote", "10.16.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_local6", "", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_remote6", "", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_ccd", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_c2c", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_ccd_excl", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_ccd_val", "", CKN_STR2048, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_pdns", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_igncrt", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_tls_keysize", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_ip6", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_nat6", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_ncp_ciphers",	DEFAULT_NCP_CIPHERS , CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_custom3",	 	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_userpass_auth",	"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpndirector_rulelist",	""		, CKN_STR7999, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_client_access",	"0"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0},
++	{ "vpn_server1_client_access",	"0"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0},
++	{ "vpn_server2_client_access",	"0"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0},
++	{ "vpn_server1_ncp_ciphers",	DEFAULT_NCP_CIPHERS, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_userpass_auth",	"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server1_custom3", 	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_ncp_ciphers",	DEFAULT_NCP_CIPHERS, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_userpass_auth",	"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server2_custom3",	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_ncp_ciphers",	DEFAULT_NCP_CIPHERS	, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_desc",		""		, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_enforce",		"0"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_custom3",		""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_fw",		"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_ncp_ciphers",	DEFAULT_NCP_CIPHERS	, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_desc", 		"Client 1"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_enforce","0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_custom3",	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client1_fw",		"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_ncp_ciphers",	DEFAULT_NCP_CIPHERS	, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_desc", 		"Client 2"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_enforce","0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_custom3",	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client2_fw",		"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_ncp_ciphers",	DEFAULT_NCP_CIPHERS	, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_desc", 		"Client 3"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_enforce","0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_custom3",	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client3_fw",		"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_ncp_ciphers",	DEFAULT_NCP_CIPHERS	, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_desc", 		"Client 4"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_enforce","0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_custom3",	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client4_fw",		"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_ncp_ciphers",	DEFAULT_NCP_CIPHERS	, CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_desc", 		"Client 5"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_enforce","0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_custom3",	""		, CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client5_fw",		"1"		, CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "wgc_desc", "", CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "wgc_enforce", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "wgc_fw", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_upload_state", "", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_upload_unit", "", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_upload_type", "", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+@@ -4021,16 +4267,16 @@
+ 	{ "vpn_server_port", "", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_firewall", "auto", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_server_comp", "yes", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_cipher", "AES-128-CBC", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_ncp_enable", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_server_digest", "SHA1", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_dhcp", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_r1", "192.168.1.50", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_r2", "192.168.1.55", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_sn", "10.8.0.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_server_sn6", "", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_sn6", "fd00:ac68:1::/64", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_local", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_remote", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_local6", "", CKN_STR63, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+@@ -4047,7 +4293,7 @@
+ 	{ "vpn_server_custom", "", CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_igncrt", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_verb", "3", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_server_tls_keysize", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_server_tls_keysize", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_ip6", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_server_nat6", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_crt_server_static", "", CKN_STR3999, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+@@ -4069,7 +4315,7 @@
+ 	{ "vpn_client_bridge", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_nat", "1", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_proto", "udp", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_client_addr", "", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_addr", "", CKN_STR128, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_port", "1194", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_retry", "30", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_rg", "0", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+@@ -4077,17 +4323,17 @@
+ 	{ "vpn_client_crypt", "tls", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_comp", "-1", CKN_STR8, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_cipher", "default", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_client_digest", "SHA1", CKN_STR16, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_digest",		"default"	, CKN_STR32, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_local", "10.8.0.2", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_remote", "10.8.0.1", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_nm", "255.255.255.0", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_reneg", "-1", CKN_STR5, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_hmac", "-1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_tlscrypt", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_client_adns", "0", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_adns", "1", CKN_STR2, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_rgw", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_gw", "", CKN_STR15, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+-	{ "vpn_client_cn", "", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++	{ "vpn_client_cn", "", CKN_STR255, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_tlsremote", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_custom", "", CKN_STR4096, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ 	{ "vpn_client_userauth", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+--- a/release/src/router/shared/mtlan_utils.c
++++ b/release/src/router/shared/mtlan_utils.c
+@@ -828,6 +828,7 @@
+ 	if (proto == VPN_PROTO_PPTP || proto == VPN_PROTO_L2TP)
+ 		return 0;
+ 
++#if 0	// Asus
+ 	nv = nvp = strdup(nvram_safe_get("vpnc_clientlist"));
+ 	if (nv) {
+ 		while ((b = strsep(&nvp, "<"))) {
+@@ -843,6 +844,12 @@
+ 		}
+ 		free(nv);
+ 	}
++#else	// Merlin
++	if (proto == VPN_PROTO_WG)
++		ret = unit;
++	else if (proto == VPN_PROTO_OVPN)
++		ret = unit + 5;
++#endif
+ 	return (ret);
+ }
+ 
+@@ -986,6 +993,7 @@
+ 	if (!vpnx)
+ 		return NULL;
+ 
++#if 0
+ 	nv = nvp = strdup(nvram_safe_get("vpnc_clientlist"));
+ 	if (nv) {
+ 		while ((b = strsep(&nvp, "<"))) {
+@@ -1007,6 +1015,18 @@
+ 		}
+ 		free(nv);
+ 	}
++#else
++// AMNG does not use vpnc_clientlist, instead OVPN unit is offset by 5 in sdn_rl nvram
++	if (vpnc_idx > 5) {
++		vpnx->proto = VPN_PROTO_OVPN;
++		vpnx->unit = vpnc_idx - 5;
++		ret = 1;
++	} else {
++		vpnx->proto = VPN_PROTO_WG;
++		vpnx->unit = vpnc_idx;
++		ret = 1;
++	}
++#endif
+ 
+ 	return (ret) ? vpnx : NULL;
+ }
+--- a/release/src/router/shared/process.c
++++ b/release/src/router/shared/process.c
+@@ -305,3 +305,23 @@
+ 	return 0;
+ }
+ #endif
++
++void killall_tk_period_wait(const char *name, int wait)
++{
++	int n;
++
++	if (killall(name, SIGTERM) == 0) {
++		n = wait;
++		while ((killall(name, 0) == 0) && (n-- > 0)) {
++//			_dprintf("%s: waiting name=%s n=%d\n", __FUNCTION__, name, n);
++			sleep(1);
++		}
++		if (n < 0) {
++			n = wait;
++			while ((killall(name, SIGKILL) == 0) && (n-- > 0)) {
++//				_dprintf("%s: SIGKILL name=%s n=%d\n", __FUNCTION__, name, n);
++				sleep(1);
++			}
++		}
++	}
++}
+--- a/release/src/router/shared/shared.h
++++ b/release/src/router/shared/shared.h
+@@ -1,5 +1,7 @@
+ #ifndef __SHARED_H__
+ #define __SHARED_H__
++
++extern void killall_tk_period_wait(const char *name, int wait);
+ 
+ #include <rtconfig.h>
+ #include <netinet/in.h>
+@@ -5504,6 +5506,7 @@
+ 	CKN_STR2999 = 2999,
+ 	CKN_STR3999 = 3999,
+ 	CKN_STR4096 = 4096,
++	CKN_STR7999 = 7999,
+ 	CKN_STR5500 = 5500,
+ 	CKN_STR8192 = 8192,
+ 	CKN_STR_MAX = 65535
+--- a/release/src/router/www/require/menuTrees/menuTree.js
++++ b/release/src/router/www/require/menuTrees/menuTree.js
+@@ -271,7 +271,12 @@
+ 				index: "menu_VPN", 
+ 				tab: [
+ 					{url: "Advanced_VPNServer_Content.asp", tabName: "<#BOP_isp_heart_item#>"},
+-					{url: "Advanced_VPNClient_Content.asp", tabName: (vpn_fusion_support) ? "<#VPN_Fusion#>" : "<#vpnc_title#>"},
++					{url: "Advanced_VPN_OpenVPN.asp", tabName: "OpenVPN Server"},
++					{url: "Advanced_VPNDirector.asp", tabName: "VPN Director"},
++					{url: "Advanced_OpenVPNClient_Content.asp", tabName: "OpenVPN Client"},
++					{url: "Advanced_WireguardClient_Content.asp", tabName: "WireGuard Client"},
++					{url: "Advanced_WireguardServer_Content.asp", tabName: "WireGuard Server"},
++					{url: "Advanced_VPNStatus.asp", tabName: "VPN Status"},
+ 					{url: "Advanced_TOR_Content.asp", tabName: "TOR"},
+ 					{url: "Advanced_Instant_Guard.asp", tabName: "<#Instant_Guard_title#>"},
+ 					{url: "Advanced_GRE_Content.asp", tabName: "GRE"},/*untranslated*/
+--- a/release/src/router/www/require/modules/menuTree.js
++++ b/release/src/router/www/require/modules/menuTree.js
+@@ -243,7 +243,12 @@
+ 				index: "menu_VPN", 
+ 				tab: [
+ 					{url: "Advanced_VPNServer_Content.asp", tabName: "<#BOP_isp_heart_item#>"},
+-					{url: "Advanced_VPNClient_Content.asp", tabName: (vpn_fusion_support) ? "<#VPN_Fusion#>" : "<#vpnc_title#>"},
++					{url: "Advanced_VPN_OpenVPN.asp", tabName: "OpenVPN Server"},
++					{url: "Advanced_VPNDirector.asp", tabName: "VPN Director"},
++					{url: "Advanced_OpenVPNClient_Content.asp", tabName: "OpenVPN Client"},
++					{url: "Advanced_WireguardClient_Content.asp", tabName: "WireGuard Client"},
++					{url: "Advanced_WireguardServer_Content.asp", tabName: "WireGuard Server"},
++					{url: "Advanced_VPNStatus.asp", tabName: "VPN Status"},
+ 					{url: "Advanced_TOR_Content.asp", tabName: "TOR"},
+ 					{url: "Advanced_Instant_Guard.asp", tabName: "<#Instant_Guard_title#>"},
+ 					{url: "NULL", tabName: "__INHERIT__"}
+--- a/release/src/router/www/Advanced_OpenVPNClient_Content.asp
++++ b/release/src/router/www/Advanced_OpenVPNClient_Content.asp
+@@ -1096,7 +1096,7 @@
+ 						<th>Password</th>
+ 						<td>
+ 							<div style="display:flex; align-items:center;">
+-								<input type="password" autocomplete="new-password" maxlength="64" class="input_25_table" id="vpn_client_password" name="vpn_client_password" value="<% nvram_clean_get("vpn_client_password"); %>">
++								<input type="password" autocomplete="new-password" maxlength="128" class="input_25_table" id="vpn_client_password" name="vpn_client_password" value="<% nvram_clean_get("vpn_client_password"); %>">
+ 								<div class="icon_eye_close" id="show_pass_1" type="password"  onclick="pass_checked($('#show_pass_1'));"></div>
+ 							</div>
+ 						</td>

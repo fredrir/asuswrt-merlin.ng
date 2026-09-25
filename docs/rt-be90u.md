@@ -170,10 +170,9 @@ Patches apply only to the verified Qualcomm GPL archive. Existing Broadcom sourc
 | Config extensions | Account files, hosts, dnsmasq, Stubby, Inadyn, UPnP, Avahi, FTP, IGMP proxy, WireGuard and IPsec |
 | Per-network DNS | `dnsmasq-sdn.postconf`, `stubby-sdn.postconf`, indexed `.add` files |
 | Entware prerequisites | `/opt`, `cru`, USB lifecycle hooks and custom scripts; package installation and runtime tests pending |
-| Full Merlin VPN stack | Not integrated; ASUS `libvpn.so` remains in the image |
-| VPN source probe | Separate `experimental-vpn-58138` tree builds an image with Merlin `libovpn`, migrated `rc`/HTTP callers and the missing shared helper; routing, DNS, configuration migration and UI unfinished; excluded from patch series |
-| VPN ABI audit | Only source-built `rc` and `httpd` depend on stock `libvpn`; Merlin key enums and config structs differ, so consumers must be recompiled together; ASUS's 256-byte password field retained in the probe |
-| ELF linkage check | Extension image and VPN probe pass recursive library, AArch64 and required-symbol checks for `rc` (26 objects) and `httpd` (23 objects); no program execution |
+| VPN engine | Default extension image retains ASUS `libvpn.so`; the separate development variant below uses Merlin `libovpn` |
+| VPN ABI audit | Only source-built `rc` and `httpd` depend on stock `libvpn`; Merlin key enums and config structs differ, so consumers must be recompiled together; ASUS's 256-byte password field retained |
+| ELF linkage check | Extension and VPN development images pass recursive library, AArch64 and required-symbol checks for `rc` (26 objects) and `httpd` (23 objects); no program execution |
 | Add-on compatibility | No claim of general compatibility; Merlin-specific UI APIs and firmware detection remain absent |
 
 The candidate Entware feed is `aarch64-k3.10`, based on the router's architecture/kernel and [Entware's ASUSWRT instructions](https://github.com/Entware/Entware/wiki/Install-on-ASUSWRT-step-by-step). No packages or scripts have been installed on the router.
@@ -227,4 +226,48 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Test limits | Native helper tests stub NVRAM/process execution; they do not test router event ordering, radio operation or VPN routing |
 | Hardware verification | Pending; router remains on stock firmware |
 
-Remaining full-port work: replace/adapt ASUS's binary OpenVPN manager, integrate Merlin VPNDirector and web APIs, review DNS/QoS/acceleration interactions, validate Entware/add-ons, then perform recovery and hardware testing before enabling release CI.
+## VPN development variant
+
+| Name | Value |
+| --- | --- |
+| Status | Build and offline testing only; not ready to flash |
+| Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
+| Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
+| Version | `58138-rtbe90u-dev2-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev2-vpn.trx`; 59,006,825 bytes |
+| SHA-256 | `5a9d1a486cd3e7de155300886afb5220b36afaccb6bc1d633e303b6492a59ffb` |
+| Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
+| Engine | Merlin `libovpn`; coordinated `rc`, HTTP and shared-library changes |
+| Networking | Merlin VPN profile mapping, named routing tables, DNS integration, WireGuard routing and VPNDirector service handling |
+| UI | OpenVPN client/server, WireGuard client/server, VPNDirector and VPN status pages; file-backed configuration handlers |
+| Acceleration | Disabled through the IPQ53xx ECM selection path for this variant; throughput impact unmeasured |
+| Credential compatibility | Retains the ASUS 256-byte password field; certificate names and private-file permissions tested |
+| Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
+| ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
+| Reproduction check | All 54 tracked source inputs match freshly prepared sources byte for byte |
+| Clean build | `logs/vpn-clean-build.log` on `archie`; exited 0. Final password-field correction rebuilt in `logs/vpn-final-build.log` |
+| Artifact checks | Both CRCs valid; fits observed UBI volume; no missing libraries or required symbols; all runtime ELF files AArch64; Qualcomm coprocessor firmware unchanged |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-repro-58138` and `image-audit-vpn-release` on `archie`; results in `logs/vpn-release-*` |
+| Remaining work | Stock VPN Fusion/SDN settings migration; browser tests; route, DNS-leak and kill-switch tests; add-on APIs; hardware validation |
+
+The supplied Merlin checkout must contain commit `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`.
+
+```sh
+bash tools/rt-be90u/prepare-vpn.sh ~/projects/rt-be90u-port \
+  ~/projects/rt-be90u-port/merlin-3006 ~/projects/rt-be90u-port/vpn-development
+cd ~/projects/rt-be90u-port
+docker run --rm --network none --ulimit core=0 --user "$(id -u):$(id -g)" \
+  --mount "type=bind,src=$PWD/vpn-development/asuswrt,dst=/work" \
+  rt-be90u-build:58138 > logs/vpn-development-build.log 2>&1
+```
+
+Test an extracted VPN image with its corresponding prepared source:
+
+```sh
+docker build -t rt-be90u-test:58138 tools/rt-be90u/tests
+docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,size=512m \
+  --mount type=bind,src=/absolute/path/to/rootfs,dst=/firmware,readonly \
+  --mount type=bind,src=/absolute/path/to/asuswrt,dst=/work,readonly \
+  --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
+  rt-be90u-test:58138 sh /tests/run-vpn-config-test.sh
+```
