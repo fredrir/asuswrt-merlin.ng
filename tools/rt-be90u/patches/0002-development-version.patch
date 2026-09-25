@@ -1,0 +1,5 @@
+--- a/release/src/router/extendno.conf
++++ b/release/src/router/extendno.conf
+@@ -1 +1 @@
+-EXTENDNO=58138-g39dc88b_934-g86de7_Q7MB
++EXTENDNO=58138-rtbe90u-dev1

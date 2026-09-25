@@ -1,0 +1,31 @@
+--- a/release/src/router/tools/Lnx_ToolHelp/genshfile.pl
++++ b/release/src/router/tools/Lnx_ToolHelp/genshfile.pl
+@@ -16,7 +16,7 @@
+ 
+ my $FH;
+ open($FH, $ShFile);
+-printf $FH "#!/bin/sh\n";
++printf $FH "#!/bin/sh\nset -e\n";
+ 
+ my $location = $FilePath;
+ my $n = 0;
+@@ -88,7 +88,7 @@
+ 	 }
+ 	 printf $FH $ToolHelp."/rmvcomments.pl"." ".$fn."\n";
+ 	 printf $FH $ToolHelp."/LnxRmvTabs"." ".$fn."\n";
+-	 printf $FH $ToolHelp."/LnxHtmlEnumDict"." ".$fn." ".$DictEnum." ".$DictNoFound."\n";
++	 printf $FH "python3 ".$ToolHelp."/html-enum.py"." ".$fn." ".$DictEnum." ".$DictNoFound."\n";
+ }
+ 
+ sub readsub {
+--- a/release/src/router/www/Makefile
++++ b/release/src/router/www/Makefile
+@@ -36,6 +36,8 @@
+ 	# INSTALLDIR is $(INSTALLDIR)/www here
+ 	mkdir -p $(INSTALLDIR)
+ 	cp ../www $(INSTALLDIR)/. -rf
++	# Ignore host crash dumps left by older dictionary tools.
++	rm -f $(INSTALLDIR)/www/core $(INSTALLDIR)/www/core.[0-9]*
+ ifeq ($(and $(HND_ROUTER),$(RTCONFIG_VISUALIZATION)),y)
+ 	install -m 644 $(VISPAGES) $(INSTALLDIR)/www
+ endif # CONFIG_VISUALIZATION

@@ -1,0 +1,780 @@
+--- a/release/src/router/rc/firewall.c
++++ b/release/src/router/rc/firewall.c
+@@ -9530,6 +9530,7 @@
+ 
+ leave:
+ 	file_unlock(lock);
++	run_custom_script("firewall-start", 0, wan_if, NULL);
+ 
+ 	return 0;
+ }
+--- a/release/src/router/rc/init.c
++++ b/release/src/router/rc/init.c
+@@ -25704,6 +25704,9 @@
+ 		asm1042_upgrade(1);	// check whether upgrade firmware of ASM1042
+ #endif
+ 
++		run_custom_script("init-start", 0, NULL, NULL);
++		use_custom_config("fstab", "/etc/fstab");
++		run_postconf("fstab", "/etc/fstab");
+ 		state = SIGUSR2;	/* START */
+ 
+ #if !defined(RTCONFIG_BCMARM) || defined(RTCONFIG_HND_ROUTER)
+--- a/release/src/router/rc/ovpn.c
++++ b/release/src/router/rc/ovpn.c
+@@ -5,10 +5,39 @@
+  */
+ 
+ #include "rc.h"
++#include <sys/stat.h>
++
++/* Keep Merlin's openvpn-event argument order and OpenVPN's environment. */
++void run_ovpn_event_script(void)
++{
++	char *script = "/jffs/scripts/openvpn-event";
++	char *dev = safe_getenv("dev");
++	char *mtu;
++	struct stat st;
++
++	if (!nvram_match("jffs2_scripts", "1") || stat(script, &st) != 0)
++		return;
++	if (!(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
++		logmessage("custom_script", "openvpn-event is not executable");
++		return;
++	}
++	if (!strncmp(dev, "tun", 3))
++		mtu = safe_getenv("tun_mtu");
++	else if (!strncmp(dev, "tap", 3))
++		mtu = safe_getenv("tap_mtu");
++	else
++		return;
++
++	logmessage("custom_script", "Running openvpn-event");
++	eval(script, dev, mtu, safe_getenv("link_mtu"),
++		safe_getenv("ifconfig_local"), safe_getenv("ifconfig_remote"),
++		safe_getenv("script_context"));
++}
+ 
+ int ovpn_up_main(int argc, char **argv)
+ {
+ 	ovpn_up_handler();
++	run_ovpn_event_script();
+ 
+ 	update_resolvconf();
+ 
+@@ -18,6 +47,7 @@
+ int ovpn_down_main(int argc, char **argv)
+ {
+ 	ovpn_down_handler();
++	run_ovpn_event_script();
+ 
+ 	update_resolvconf();
+ 
+@@ -27,6 +57,7 @@
+ int ovpn_route_up_main(int argc, char **argv)
+ {
+ 	ovpn_route_up_handler();
++	run_ovpn_event_script();
+ 
+ 	return 0;
+ }
+@@ -34,6 +65,7 @@
+ int ovpn_route_pre_down_main(int argc, char **argv)
+ {
+ 	ovpn_route_pre_down_handler();
++	run_ovpn_event_script();
+ 
+ 	return 0;
+ }
+--- a/release/src/router/rc/rc.h
++++ b/release/src/router/rc/rc.h
+@@ -2426,6 +2426,7 @@
+ #endif
+ 
+ // ovpn.c
++extern void run_ovpn_event_script(void);
+ extern int ovpn_up_main(int argc, char **argv);
+ extern int ovpn_down_main(int argc, char **argv);
+ extern int ovpn_route_up_main(int argc, char **argv);
+--- a/release/src/router/rc/rc_ipsec.c
++++ b/release/src/router/rc/rc_ipsec.c
+@@ -639,6 +639,8 @@
+ 
+ 	fprintf(fp, "}\n");
+ 	fclose(fp);
++
++	run_postconf("strongswan","/etc/strongswan.conf");
+ }
+ 
+ void rc_ipsec_ca2ipsecd_cp(FILE *fp, uint32_t idx)
+@@ -1801,6 +1803,7 @@
+ 
+     if(NULL != fp){
+         fclose(fp);
++        run_postconf("ipsec","/etc/ipsec.conf");
+     }
+     return;
+ }
+--- a/release/src/router/rc/sdn.c
++++ b/release/src/router/rc/sdn.c
+@@ -470,7 +470,11 @@
+ 	if (nv)
+ 		free(nv);
+ 
++	snprintf(buf, sizeof(buf), "stubby-%d.yml", pmtl->nw_t.idx);
++	append_custom_config(buf, fp);
+ 	fclose(fp);
++	snprintf(buf, sizeof(buf), "%d", pmtl->sdn_t.sdn_idx);
++	run_custom_script("stubby-sdn.postconf", 120, config_file, buf);
+ 	chmod(config_file, 0644);
+ 
+ 	if (nvram_get_int("stubby_debug")) {
+@@ -525,7 +529,7 @@
+ static int _gen_sdn_dnsmasq_conf(const MTLAN_T *pmtl, char *config_file, const size_t path_len)
+ {
+ 	FILE *fp;
+-	char resolv_path[64];
++	char resolv_path[64], buf[32];
+ 	int resolv_flag = 0, n;
+ #if defined(RTCONFIG_DNSFILTER)
+ 	int count;
+@@ -815,7 +819,11 @@
+ 
+ 		// TODO: Set VPN server
+ 
++		snprintf(buf, sizeof(buf), "dnsmasq-%d.conf", pmtl->sdn_t.sdn_idx);
++		append_custom_config(buf, fp);
+ 		fclose(fp);
++		snprintf(buf, sizeof(buf), "%d", pmtl->sdn_t.sdn_idx);
++		run_custom_script("dnsmasq-sdn.postconf", 120, config_file, buf);
+ 		return 0;
+ 	}
+ 	return -1;
+--- a/release/src/router/rc/services.c
++++ b/release/src/router/rc/services.c
+@@ -1058,7 +1058,9 @@
+ 		fappend(fp, "/etc/shadow.chilli");
+ 		fappend(fp, "/etc/shadow.chilli-cp");
+ #endif
++		append_custom_config("shadow", fp);
+ 		fclose(fp);
++		run_postconf("shadow","/etc/shadow");
+ 		chmod("/etc/shadow", 0600);
+ 	}
+ 
+@@ -1078,7 +1080,9 @@
+ #endif
+ 		);
+ 		fappend(fp, "/etc/gshadow.custom");
++		append_custom_config("gshadow", fp);
+ 		fclose(fp);
++		run_postconf("gshadow", "/etc/gshadow");
+ 		chmod("/etc/gshadow", 0600);
+ 	}
+ 
+@@ -1097,10 +1101,12 @@
+ 		fprintf(fp, "tor:x:65533:65533:tor:/dev/null:/dev/null\n");
+ #endif
+ 		fappend(fp, "/etc/passwd.custom");
++		append_custom_config("passwd", fp);
+ 		fclose(fp);
+ #ifdef RTCONFIG_OPENVPN
+ 		append_ovpn_accnt("/etc/passwd", "/etc/passwd.openvpn");
+ #endif
++		run_postconf("passwd", "/etc/passwd");
+ 		chmod("/etc/passwd", 0644);
+ 	}
+ 
+@@ -1120,7 +1126,9 @@
+ #endif
+ 		);
+ 		fappend(fp, "/etc/group.custom");
++		append_custom_config("group", fp);
+ 		fclose(fp);
++		run_postconf("group", "/etc/group");
+ 		chmod("/etc/group", 0644);
+ 	}
+ 
+@@ -1610,7 +1618,11 @@
+ 			}
+ 		}
+ #endif
++		append_custom_config("hosts", fp);
+ 		fclose(fp);
++		use_custom_config("hosts", "/etc/hosts");
++		run_postconf("hosts","/etc/hosts");
++		chmod("/etc/hosts", 0644);
+ 	} else
+ 		perror("/etc/hosts");
+ 
+@@ -2229,7 +2241,11 @@
+ 	fprintf(fp, "edns-packet-max=1232\n");
+ 
+ 	/* close fp move to the last */
++	append_custom_config("dnsmasq.conf", fp);
+ 	fclose(fp);
++	use_custom_config("dnsmasq.conf", "/etc/dnsmasq.conf");
++	run_postconf("dnsmasq", "/etc/dnsmasq.conf");
++	chmod("/etc/dnsmasq.conf", 0644);
+ 
+ 	/* Create resolv.conf with empty nameserver list */
+ 	f_write(dmresolv, NULL, 0, FW_APPEND, 0666);
+@@ -2497,7 +2513,10 @@
+ 	if (nv)
+ 		free(nv);
+ 
++	append_custom_config("stubby.yml", fp);
+ 	fclose(fp);
++//	use_custom_config("stubby.yml", (char *)stubby_config);
++	run_postconf("stubby", (char *)stubby_config);
+ 	chmod(stubby_config, 0644);
+ 
+ 	if (nvram_get_int("stubby_debug")) {
+@@ -5447,7 +5466,13 @@
+ 			if(nvram_get_int("ddns_ipv6_update") && (strncmp(server, "WWW.DYNDNS.ORG", 14) == 0))
+ 				fprintf(fp, "allow-ipv6 = true\n");
+ #endif
++
++			append_custom_config("inadyn.conf", fp);
++
+ 			fclose(fp);
++
++			use_custom_config("inadyn.conf", "/etc/inadyn.conf");
++			run_postconf("inadyn", "/etc/inadyn.conf");
+ 
+ #if defined(RTCONFIG_TUNNEL) && defined(RTCONFIG_ACCOUNT_BINDING)
+ 			if(is_account_bound() && nvram_match("ddns_replace_status", "1") &&
+@@ -5497,6 +5522,7 @@
+ 	if (nvram_match("ddns_tunbkrnet", "1")) {
+ 		int evalRet = eval("iptables-restore", "/tmp/filter_rules");
+ 		rule_apply_checking("services", __LINE__, "/tmp/filter_rules", evalRet);
++		run_custom_script("firewall-start", 0, get_wan_ifname(wan_primary_ifunit()), NULL);
+ 		nvram_unset("ddns_tunbkrnet");
+ 	}
+ #ifdef RTCONFIG_OPENVPN
+@@ -7493,9 +7519,12 @@
+ 					fprintf(f, "allow 1024-65535 %s/%s 1024-65535\n", lanip, lanmask);
+ 				}
+ 
++				append_custom_config("upnp", f);
+ 				fappend(f, "/etc/upnp/config.custom");
+ 				fprintf(f, "\ndeny 0-65535 0.0.0.0/0 0-65535\n");
+ 				fclose(f);
++				use_custom_config("upnp", "/etc/upnp/config");
++				run_postconf("upnp", "/etc/upnp/config");
+ 				xstart("miniupnpd", "-f", "/etc/upnp/config");
+ #ifdef RTCONFIG_AUPNPC
+ 				start_aupnpc();
+@@ -7801,7 +7830,10 @@
+ 	fprintf(fp, "rlimit-stack=4194304\n");
+ 	fprintf(fp, "rlimit-nproc=3\n");
+ 
++	append_custom_config(AVAHI_CONFIG_FN, fp);
+ 	fclose(fp);
++	use_custom_config(AVAHI_CONFIG_FN, avahi_config);
++	run_postconf("avahi-daemon", avahi_config);
+ 
+ 	return ret;
+ }
+@@ -7833,7 +7865,10 @@
+ 	fprintf(fp, "</service>\n");
+ 	fprintf(fp, "</service-group>\n");
+ 
++	append_custom_config(AVAHI_AFPD_SERVICE_FN, fp);
+ 	fclose(fp);
++	use_custom_config(AVAHI_AFPD_SERVICE_FN, afpd_service_config);
++	run_postconf("afpd", afpd_service_config);
+ 
+ 	return ret;
+ }
+@@ -7861,7 +7896,10 @@
+ 	fprintf(fp, "</service>\n");
+ 	fprintf(fp, "</service-group>\n");
+ 
++	append_custom_config(AVAHI_ADISK_SERVICE_FN, fp);
+ 	fclose(fp);
++	use_custom_config(AVAHI_ADISK_SERVICE_FN, adisk_service_config);
++	run_postconf("adisk", adisk_service_config);
+ 
+ 	return ret;
+ }
+@@ -7894,7 +7932,10 @@
+ 	fprintf(fp, "</service>\n");
+ 	fprintf(fp, "</service-group>\n");
+ 
++	append_custom_config(AVAHI_ITUNE_SERVICE_FN, fp);
+ 	fclose(fp);
++	use_custom_config(AVAHI_ITUNE_SERVICE_FN, itune_service_config);
++	run_postconf("mt-daap", itune_service_config);
+ 
+ 	return ret;
+ }
+@@ -12951,12 +12992,16 @@
+ 	start_poemon();
+ #endif
+ #endif
++	run_custom_script("services-start", 0, NULL, NULL);
++
+ 	return 0;
+ }
+ 
+ void
+ stop_services(void)
+ {
++	run_custom_script("services-stop", 0, NULL, NULL);
++
+ #ifdef RTCONFIG_FSMD
+ 	killall_tk("fsmd");
+ #endif
+@@ -15164,7 +15209,7 @@
+ void handle_notifications(void)
+ {
+ 	char nv[256], nvtmp[32], *cmd[8], *script;
+-	char *nvp, *b, *nvptr;
++	char *nvp, *b, *nvptr, *actionstr;
+ 	int action = 0;
+ 	int count;
+ 	int i;
+@@ -15185,6 +15230,7 @@
+ 	strlcpy(nv, nvram_safe_get("rc_service"), sizeof(nv));
+ 	nvptr = nv;
+ again:
++	action = 0;
+ 	nvp = strsep(&nvptr, ";");
+ 	//_dprintf("chk nv=%s, nvp=%s, rc_service=%s\n", nv, nvp, nvram_safe_get("rc_service"));
+ 
+@@ -15206,18 +15252,22 @@
+ 
+ 	if(strncmp(cmd[0], "start_", 6)==0) {
+ 		action |= RC_SERVICE_START;
++		actionstr = "start";
+ 		script = &cmd[0][6];
+ 	}
+ 	else if(strncmp(cmd[0], "stop_", 5)==0) {
+ 		action |= RC_SERVICE_STOP;
++		actionstr = "stop";
+ 		script = &cmd[0][5];
+ 	}
+ 	else if(strncmp(cmd[0], "restart_", 8)==0) {
+ 		action |= (RC_SERVICE_START | RC_SERVICE_STOP);
++		actionstr = "restart";
+ 		script = &cmd[0][8];
+ 	}
+ 	else {
+ 		action = 0;
++		actionstr = "";
+ 		script = cmd[0];
+ 	}
+ 
+@@ -15225,6 +15275,8 @@
+ 	if(!strstr(script, "autowan")) // remove noise of autowan in wanduck
+ #endif
+ 	TRACE_PT("running: %d %s\n", action, script);
++
++	run_custom_script("service-event", 120, actionstr, script);
+ 
+ #ifdef RTCONFIG_USB_MODEM
+ 	if(!strcmp(script, "simauth")
+@@ -21350,6 +21402,8 @@
+ 	}
+ 
+ skip:
++	run_custom_script("service-event-end", 0, actionstr, script);
++
+ 	if(nvptr && strlen(nvptr)){
+ _dprintf("goto again(%d)...\n", getpid());
+ 		goto again;
+@@ -22435,6 +22489,8 @@
+ 
+ 	setup_ct_timeout(TRUE);
+ 	setup_udp_timeout(TRUE);
++
++	run_custom_script("nat-start", 0, NULL, NULL);
+ 
+ 	return NAT_STATE_NORMAL;
+ }
+--- a/release/src/router/rc/ubifs.c
++++ b/release/src/router/rc/ubifs.c
+@@ -218,6 +218,7 @@
+ 	if ((statfs(UBIFS_MNT_DIR, &sf) == 0)
+ 	    && (sf.f_type != 0x73717368 /* squashfs */ )) {
+ 		// already mounted
++		setup_jffs_dirs();
+ 		notice_set("ubifs", format ? "Formatted" : "Loaded");
+ #if defined(RTCONFIG_HND_ROUTER_AX_6756) || defined(RTCONFIG_HND_ROUTER_BE_4916)
+ 		goto skip_mnt;
+@@ -293,6 +294,7 @@
+ 	}
+ 
+ 	userfs_prepare(UBIFS_MNT_DIR);
++	setup_jffs_dirs();
+ 
+ 	notice_set("ubifs", format ? "Formatted" : "Loaded");
+ 
+--- a/release/src/router/rc/udhcpc.c
++++ b/release/src/router/rc/udhcpc.c
+@@ -812,6 +812,9 @@
+ int
+ udhcpc_wan(int argc, char **argv)
+ {
++	if (argc > 1 && argv[1])
++		run_custom_script("dhcpc-event", 0, argv[1], "4");
++
+ 	if(argv[1] && !strstr(argv[1], "leasefail"))
+ 		_dprintf("%s:: %s\n", __func__, argv[1]);
+ 	if (!argv[1]){
+@@ -1126,6 +1129,9 @@
+ int
+ zcip_wan(int argc, char **argv)
+ {
++	if (argc > 1 && argv[1])
++		run_custom_script("zcip-event", 0, argv[1], NULL);
++
+ 	_dprintf("%s:: %s\n", __FUNCTION__, argv[1] ? : "");
+ 	if (!argv[1])
+ 		return EINVAL;
+@@ -1379,6 +1385,9 @@
+ int
+ udhcpc_lan(int argc, char **argv)
+ {
++	if (argc > 1 && argv[1])
++		run_custom_script("dhcpc-event", 0, argv[1], NULL);
++
+ 	_dprintf("%s:: %s\n", __FUNCTION__, argv[1] ? : "");
+ 	if (!argv[1])
+ 		return EINVAL;
+@@ -2309,6 +2318,9 @@
+ 
+ int dhcp6c_wan(int argc, char **argv)
+ {
++	if (argc > 2 && argv[2])
++		run_custom_script("dhcpc-event", 0, argv[2], "6");
++
+ 	if (!argv[1] || !argv[2])
+ 		return EINVAL;
+ 	else if (strcmp(argv[2], "started") == 0)
+--- a/release/src/router/rc/usb.c
++++ b/release/src/router/rc/usb.c
+@@ -1998,6 +1998,11 @@
+ #ifdef RTCONFIG_USB_SWAP	
+ 		stop_usb_swap(mnt->mnt_dir);
+ #endif	
++
++	run_custom_script("unmount", 120, mnt->mnt_dir, NULL);
++
++	sync();
++	sleep(1);       // Give some time for buffers to be physically written to disk
+ 
+ 	for (count = 0; count < 35; count++) {
+ 		sync();
+@@ -2178,6 +2183,8 @@
+ 	if (type == NULL)
+ 		type = "unknown";
+ 
++	run_custom_script("pre-mount", 120, dev_name, type);
++
+ #if !defined(RTCONFIG_HND_ROUTER_AX_6710) && !defined(RTCONFIG_BCM_502L07P2) && !defined(BCM4912) && !defined(BCM4906_504)
+ 	char *end;
+ 	static char *swp_argv[] = { "swapon", "-a", NULL };
+@@ -2374,6 +2381,8 @@
+ 
+ 		// if (nvram_get_int("usb_automount"))
+ 			// run_nvscript("script_usbmount", mountpoint, 3);
++
++		run_custom_script("post-mount", 120, mountpoint, NULL);
+ 
+ #if defined(RTCONFIG_CLOUDSYNC)
+ 		char word[PATH_MAX], *next_word;
+@@ -3001,7 +3010,12 @@
+ #else
+ 	fprintf(fp, "ssl_enable=NO\n");
+ #endif	// HTTPS
++
++	append_custom_config("vsftpd.conf", fp);
+ 	fclose(fp);
++
++	use_custom_config("vsftpd.conf", "/etc/vsftpd.conf");
++	run_postconf("vsftpd", "/etc/vsftpd.conf");
+ }
+ 
+ /*
+--- a/release/src/router/rc/vpnc_fusion.c
++++ b/release/src/router/rc/vpnc_fusion.c
+@@ -944,6 +944,7 @@
+ 			snprintf(rt_table, sizeof(rt_table), "%d", IP_ROUTE_TABLE_ID_VPNC_BASE + vpnc_idx);
+ 			setenv("rt_table", rt_table, 1);
+ 			ovpn_route_up_handler();
++			run_ovpn_event_script();
+ 		}
+ 	}
+ 	return 0;
+@@ -975,6 +976,7 @@
+ 		snprintf(rt_table, sizeof(rt_table), "%d", IP_ROUTE_TABLE_ID_VPNC_BASE + vpnc_idx);
+ 		setenv("rt_table", rt_table, 1);
+ 		ovpn_route_pre_down_handler();
++		run_ovpn_event_script();
+ 	}
+ 
+ 	return 0;
+--- a/release/src/router/rc/wan.c
++++ b/release/src/router/rc/wan.c
+@@ -589,7 +589,10 @@
+ 		wan_ifname, *altnet ? altnet : "0.0.0.0/0",
+ 		nvram_get("lan_ifname") ? : "br0");
+ 
++	append_custom_config("igmpproxy.conf", fp);
+ 	fclose(fp);
++	use_custom_config("igmpproxy.conf", igmpproxy_conf);
++	run_postconf("igmpproxy", igmpproxy_conf);
+ 
+ 	eval("/usr/sbin/igmpproxy", igmpproxy_conf);
+ #endif
+@@ -794,6 +797,42 @@
+ 	else if(state == WAN_STATE_STOPPING) {
+ 		snprintf(tmp, sizeof(tmp), "/var/run/ppp-wan%d.status", unit);
+ 		unlink(tmp);
++	}
++
++	sprintf(tmp,"%d", unit);
++
++	switch (state) {
++	case WAN_STATE_INITIALIZING:
++		strcpy(tmp1, "init");
++		break;
++	case WAN_STATE_CONNECTING:
++		strcpy(tmp1, "connecting");
++		break;
++	case WAN_STATE_CONNECTED:
++		strcpy(tmp1, "connected");
++		break;
++	case WAN_STATE_DISCONNECTED:
++		strcpy(tmp1, "disconnected");
++		break;
++	case WAN_STATE_STOPPED:
++		strcpy(tmp1, "stopped");
++		break;
++	case WAN_STATE_DISABLED:
++		strcpy(tmp1, "disabled");
++		break;
++	case WAN_STATE_STOPPING:
++		strcpy(tmp1, "stopping");
++		break;
++	default:
++		sprintf(tmp1, "state %d", state);
++	}
++
++	run_custom_script("wan-event", 0, tmp, tmp1);
++
++	/* For backward/legacy compatibility */
++	if (state == WAN_STATE_CONNECTED) {
++		sprintf(tmp,"%c",prefix[3]);
++		run_custom_script("wan-start", 0, tmp, NULL);
+ 	}
+ }
+ 
+--- a/release/src/router/rc/wireguard.c
++++ b/release/src/router/rc/wireguard.c
+@@ -928,6 +928,12 @@
+ 		fprintf(fp, "PersistentKeepalive = %d\n", alive ?: 25);
+ 
+ 		fclose(fp);
++		{
++			char config[32];
++			snprintf(config, sizeof(config), "wgclient%d", atoi(prefix + 3));
++			use_custom_config(config, path);
++			run_postconf(config, path);
++		}
+ 	}
+ }
+ 
+@@ -1109,6 +1115,9 @@
+ 			fprintf(fp, "PersistentKeepalive = %d\n", alive);
+ 
+ 		fclose(fp);
++
++		use_custom_config("wgserver_peer", c_path);
++		run_postconf("wgserver_peer", c_path);
+ 	}
+ }
+ 
+@@ -1172,6 +1181,9 @@
+ 		}
+ 
+ 		fclose(fp);
++
++		use_custom_config("wgserver", path);
++		run_postconf("wgserver", path);
+ 	}
+ }
+ 
+@@ -1533,6 +1545,11 @@
+ 
+ 	/// related services
+ 	_wg_server_update_service(prefix);
++	{
++		char arg[16];
++		snprintf(arg, sizeof(arg), "%d", unit);
++		run_custom_script("wgserver-start", 0, arg, NULL);
++	}
+ }
+ 
+ void stop_wgs(int unit)
+@@ -1548,6 +1565,12 @@
+ 	char fpath[128] = {0};
+ #endif
+ 
++	{
++		char arg[16];
++		snprintf(arg, sizeof(arg), "%d", unit);
++		run_custom_script("wgserver-stop", 0, arg, NULL);
++	}
++
+ 	snprintf(ifname, sizeof(ifname), "%s%d", WG_SERVER_IF_PREFIX, unit);
+ 	snprintf(prefix, sizeof(prefix), "%s%d_", WG_SERVER_NVRAM_PREFIX, unit);
+ 
+@@ -1659,6 +1682,11 @@
+ 	/// check endpoint jobs
+ 	if (!_wgc_check_ep_jobs_exist())
+ 		_wgc_check_ep_jobs_install();
++	{
++		char arg[16];
++		snprintf(arg, sizeof(arg), "%d", unit);
++		run_custom_script("wgclient-start", 0, arg, NULL);
++	}
+ }
+ 
+ void stop_wgc(int unit)
+@@ -1671,6 +1699,12 @@
+ 	int wg_enable = _is_any_wgs_enabled() | any_wgc_enabled;
+ 
+ 	_dprintf("%s %d\n", __FUNCTION__, unit);
++
++	{
++		char arg[16];
++		snprintf(arg, sizeof(arg), "%d", unit);
++		run_custom_script("wgclient-stop", 0, arg, NULL);
++	}
+ 
+ 	snprintf(prefix, sizeof(prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, unit);
+ 	snprintf(ifname, sizeof(ifname), "%s%d", WG_CLIENT_IF_PREFIX, unit);
+--- a/release/src/router/shared/Makefile
++++ b/release/src/router/shared/Makefile
+@@ -198,9 +198,7 @@
+ ifeq ($(RTCONFIG_MULTILAN_CFG),y)
+ OBJS += mtlan_utils.o
+ endif
+-ifeq ($(RTCONFIG_TOR),y)
+ OBJS += scripts.o
+-endif
+ ifeq ($(RTCONFIG_AHS),y)
+ OBJS += $(if $(wildcard notify_ahs.c),notify_ahs.o,prebuild/notify_ahs.o)
+ endif
+--- a/release/src/router/shared/defaults.c
++++ b/release/src/router/shared/defaults.c
+@@ -3349,6 +3349,10 @@
+ 
+ #if defined(RTCONFIG_JFFS2) || defined(RTCONFIG_BRCM_NAND_JFFS2)
+ 	{ "jffs2_on", "1", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
++#endif
++
++#if defined(RTCONFIG_JFFS2) || defined(RTCONFIG_BRCM_NAND_JFFS2) || defined(RTCONFIG_UBIFS)
++	{ "jffs2_scripts", "0", CKN_STR1, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+ #endif
+ 
+ #ifdef RTCONFIG_UBIFS
+--- a/release/src/router/shared/scripts.c
++++ b/release/src/router/shared/scripts.c
+@@ -62,7 +62,7 @@
+ 	snprintf(script, sizeof(script), "/jffs/scripts/%s", name);
+ 
+ 	if (!stat(script, &st)) {
+-		if (nvram_match("jffs2_scripts", "0"))
++		if (!nvram_match("jffs2_scripts", "1"))
+ 			error = "custom script execution is disabled!";
+ 		else if (!(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)))
+ 			error = "script is not set executable!";
+@@ -70,14 +70,21 @@
+ 			error = NULL;
+ 
+ 		if (error) {
++#if defined(RTCONFIG_AUTO_WANPORT) && !defined(RTCONFIG_BCM_MFG)
++			if(!(!strncmp(name, "service-event",13) && strstr((arg2 ? arg2 : ""), "autowan"))) // remove noise of autowan in wanduck
++#endif
+ 			logmessage("custom_script", "Found %s, but %s", name, error);
+ 			return;
+ 		}
+ 
+-		if (arg1)
++		if (arg1) {
++#if defined(RTCONFIG_AUTO_WANPORT) && !defined(RTCONFIG_BCM_MFG)
++			if(!(!strncmp(name, "service-event",13) && strstr((arg2 ? arg2 : ""), "autowan"))) // remove noise of autowan in wanduck
++#endif
+ 			logmessage("custom_script" ,"Running %s (args: %s%s%s)", script, arg1, (arg2 ? " " : ""), (arg2 ? arg2 : ""));
+-		else
++		} else {
+ 			logmessage("custom_script" ,"Running %s", script);
++		}
+ 
+ 		cmd[0] = script;
+ 		cmd[1] = arg1;
+@@ -104,7 +111,7 @@
+         snprintf(filename, sizeof(filename), "/jffs/configs/%s", config);
+ 
+ 	if (f_exists(filename)) {
+-		if (nvram_match("jffs2_scripts", "0")) {
++		if (!nvram_match("jffs2_scripts", "1")) {
+ 			logmessage("custom config", "Found %s, but custom configs are disabled!", filename);
+ 			return;
+ 		}
+@@ -121,7 +128,7 @@
+ 	snprintf(filename, sizeof(filename), "/jffs/configs/%s.add", config);
+ 
+ 	if (f_exists(filename)) {
+-		if (nvram_match("jffs2_scripts", "0")) {
++		if (!nvram_match("jffs2_scripts", "1")) {
+ 			logmessage("custom config", "Found %s, but custom configs are disabled!", filename);
+ 			return;
+ 		}
+@@ -130,3 +137,9 @@
+ 	}
+ }
+ 
++void setup_jffs_dirs(void)
++{
++	if (!d_exists("/jffs/scripts/")) mkdir("/jffs/scripts/", 0755);
++	if (!d_exists("/jffs/configs/")) mkdir("/jffs/configs/", 0755);
++	if (!d_exists("/jffs/addons/")) mkdir("/jffs/addons/", 0755);
++}
+--- a/release/src/router/shared/shared.h
++++ b/release/src/router/shared/shared.h
+@@ -4337,13 +4337,12 @@
+ extern int vpns_use_tunnel(void);
+ extern int vpnc_use_tunnel(int vpnc_unit, const char *proto);
+ 
+-#ifdef RTCONFIG_TOR
+ /* scripts.c */
+ extern void run_custom_script(char *name, int timeout, char *arg1, char *arg2);
+ extern void run_postconf(char *name, char *config);
+ extern void use_custom_config(char *config, char *target);
+ extern void append_custom_config(char *config, FILE *fp);
+-#endif
++extern void setup_jffs_dirs(void);
+ 
+ /* mt7620.c */
+ #if defined(RTCONFIG_RALINK_MT7620)
+--- a/release/src/router/www/Advanced_System_Content.asp
++++ b/release/src/router/www/Advanced_System_Content.asp
+@@ -2709,6 +2709,13 @@
+ 						<div style="color: #FFCC00;display:none;" id="SSH_Port_Suggestion2">* <#SSH_Port_Suggestion2#></div>
+ 					</td>
+ 				</tr>
++				<tr>
++					<th>Enable JFFS custom scripts and configs</th>
++					<td>
++					<input type="radio" name="jffs2_scripts" value="1" <% nvram_match("jffs2_scripts", "1", "checked"); %>><#checkbox_Yes#>
++					<input type="radio" name="jffs2_scripts" value="0" <% nvram_match("jffs2_scripts", "0", "checked"); %>><#checkbox_No#>
++					</td>
++				</tr>
+ 				<tr id="sshd_enable_tr">
+ 					<th width="40%"><#Enable_SSH#></th>
+ 					<td>
