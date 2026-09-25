@@ -48,10 +48,16 @@
   "release/src/router/www/Advanced_VPN_OpenVPN.asp",
   "release/src/router/www/Advanced_WireguardClient_Content.asp",
   "release/src/router/www/Advanced_WireguardServer_Content.asp",
+  "release/src/router/www/Makefile",
   "release/src/router/www/ajax_openvpn_client_status.xml",
   "release/src/router/www/ajax_openvpn_server.asp",
   "release/src/router/www/ajax_vpn_status.asp",
   "release/src/router/www/ajax_vpnserver_client_status.xml",
+  "release/src/router/www/images/New_ui/disable.svg",
+  "release/src/router/www/images/New_ui/disable_hover.svg",
+  "release/src/router/www/images/New_ui/enable.svg",
+  "release/src/router/www/images/New_ui/enable_hover.svg",
   "release/src/router/www/require/menuTrees/menuTree.js",
-  "release/src/router/www/require/modules/menuTree.js"
+  "release/src/router/www/require/modules/menuTree.js",
+  "release/src/router/www/validator.js"
 ]

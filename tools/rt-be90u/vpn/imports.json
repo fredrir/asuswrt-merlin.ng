@@ -32,6 +32,10 @@
     "release/src/router/www/ajax_openvpn_server.asp": "release/src/router/www/ajax_openvpn_server.asp",
     "release/src/router/www/ajax_vpn_status.asp": "release/src/router/www/ajax_vpn_status.asp",
     "release/src/router/www/ajax_openvpn_client_status.xml": "release/src/router/www/ajax_openvpn_client_status.xml",
-    "release/src/router/www/ajax_vpnserver_client_status.xml": "release/src/router/www/ajax_vpnserver_client_status.xml"
+    "release/src/router/www/ajax_vpnserver_client_status.xml": "release/src/router/www/ajax_vpnserver_client_status.xml",
+    "release/src/router/www/images/New_ui/enable.svg": "release/src/router/www/images/New_ui/enable.svg",
+    "release/src/router/www/images/New_ui/enable_hover.svg": "release/src/router/www/images/New_ui/enable_hover.svg",
+    "release/src/router/www/images/New_ui/disable.svg": "release/src/router/www/images/New_ui/disable.svg",
+    "release/src/router/www/images/New_ui/disable_hover.svg": "release/src/router/www/images/New_ui/disable_hover.svg"
   }
 }
