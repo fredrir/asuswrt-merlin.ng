@@ -172,7 +172,7 @@ Patches apply only to the verified Qualcomm GPL archive. Existing Broadcom sourc
 | OpenVPN events | `openvpn-event` with six arguments and the inherited OpenVPN environment; includes VPN Fusion route callbacks |
 | Config extensions | Account files, hosts, dnsmasq, Stubby, Inadyn, UPnP, Avahi, FTP, IGMP proxy, WireGuard and IPsec |
 | Per-network DNS | `dnsmasq-sdn.postconf`, `stubby-sdn.postconf`, indexed `.add` files |
-| Entware prerequisites | `/opt`, `cru`, USB lifecycle hooks and custom scripts; package installation and runtime tests pending |
+| Entware prerequisites | `/opt`, `cru`, USB lifecycle hooks and custom scripts; package execution under QEMU passes; USB installation and service lifecycle tests pending |
 | VPN engine | Default extension image retains ASUS `libvpn.so`; the separate development variant below uses Merlin `libovpn` |
 | VPN ABI audit | Only source-built `rc` and `httpd` depend on stock `libvpn`; Merlin key enums and config structs differ, so consumers must be recompiled together; ASUS's 256-byte password field retained |
 | ELF linkage check | Extension and VPN development images pass recursive library, AArch64 and required-symbol checks for `rc` (26 objects) and `httpd` (23 objects); no program execution |
@@ -277,4 +277,28 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
   --mount type=bind,src=/absolute/path/to/asuswrt,dst=/work,readonly \
   --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
   rt-be90u-test:58138 sh /tests/run-vpn-config-test.sh
+```
+
+## Entware binary compatibility
+
+| Name | Value |
+| --- | --- |
+| Feed | [Entware AArch64](https://github.com/Entware/Entware/wiki#installation), `aarch64-k3.10` |
+| Fixture | `tests/entware-fixture.json`; fixed package filenames and SHA-256 hashes |
+| Downloads | `prepare-entware-test.py NEW_DIRECTORY`; verifies hashes before making the completed directory available; leaves existing directories unchanged |
+| Runtime | Extracted `dev3-vpn` filesystem in a disposable, network-disabled container; firmware `/opt` link preserved |
+| Passed | Static `opkg` reads the architecture configuration; dynamically linked GNU `find` 4.10.0 loads Entware's glibc and finds a fixture file |
+| Failure checks | Existing download directory rejected; corrupt bootstrap rejected before extraction or execution |
+| Evidence | `archie:~/projects/rt-be90u-port/logs/vpn-dev3-entware-test.log` and `logs/entware-negative-tests.log` |
+| Limits | QEMU uses the build host's kernel; package installation scripts, USB mounts, boot/shutdown services and router execution remain untested |
+
+The package payloads are extracted only in the test container; the installer and package scripts are not executed.
+
+```sh
+python3 tools/rt-be90u/prepare-entware-test.py /absolute/path/to/entware-test-packages
+docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,size=512m \
+  --mount type=bind,src=/absolute/path/to/rootfs,dst=/firmware,readonly \
+  --mount type=bind,src=/absolute/path/to/entware-test-packages,dst=/packages,readonly \
+  --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
+  rt-be90u-test:58138 sh /tests/run-entware-test.sh
 ```
