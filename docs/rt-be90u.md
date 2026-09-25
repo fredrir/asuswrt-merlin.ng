@@ -171,10 +171,20 @@ Patches apply only to the verified Qualcomm GPL archive. Existing Broadcom sourc
 | Per-network DNS | `dnsmasq-sdn.postconf`, `stubby-sdn.postconf`, indexed `.add` files |
 | Entware prerequisites | `/opt`, `cru`, USB lifecycle hooks and custom scripts; package installation and runtime tests pending |
 | Full Merlin VPN stack | Not integrated; ASUS `libvpn.so` remains in the image |
-| VPN source probe | Merlin `libovpn` compiles after adding `wg_type_t`; remaining shared helper/caller/routing/UI integration required; probe excluded from patch series |
+| VPN source probe | Separate `experimental-vpn-58138` tree builds an image with Merlin `libovpn`, migrated `rc`/HTTP callers and the missing shared helper; routing, DNS, configuration migration and UI unfinished; excluded from patch series |
+| VPN ABI audit | Only source-built `rc` and `httpd` depend on stock `libvpn`; Merlin key enums and config structs differ, so consumers must be recompiled together; ASUS's 256-byte password field retained in the probe |
+| ELF linkage check | Extension image and VPN probe pass recursive library, AArch64 and required-symbol checks for `rc` (26 objects) and `httpd` (23 objects); no program execution |
 | Add-on compatibility | No claim of general compatibility; Merlin-specific UI APIs and firmware detection remain absent |
 
 The candidate Entware feed is `aarch64-k3.10`, based on the router's architecture/kernel and [Entware's ASUSWRT instructions](https://github.com/Entware/Entware/wiki/Install-on-ASUSWRT-step-by-step). No packages or scripts have been installed on the router.
+
+Audit an extracted firmware filesystem on Linux with GNU `readelf`:
+
+```sh
+python3 tools/rt-be90u/check-linkage.py /path/to/rootfs
+```
+
+The audit uses musl's default library paths and symbol names. It does not validate dynamically loaded plugins, runtime configuration, routing or bootability.
 
 After preparing the stock build environment, run from this repository on Linux:
 
