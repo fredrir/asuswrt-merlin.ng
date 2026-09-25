@@ -12,11 +12,13 @@ import urllib.request
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
+    parser.add_argument('--install', action='store_true', help='Download the complete pinned entware-opt fixture')
     args = parser.parse_args()
     destination = args.directory.absolute()
     if destination.exists() or destination.is_symlink():
         parser.exit(1, 'Directory already exists; left unchanged\n')
-    manifest = json.loads((Path(__file__).parent / 'tests/entware-fixture.json').read_text())
+    fixture = 'entware-install-fixture.json' if args.install else 'entware-fixture.json'
+    manifest = json.loads((Path(__file__).parent / 'tests' / fixture).read_text())
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=destination.parent, prefix='.entware-test-') as temporary:
         stage = Path(temporary) / 'packages'

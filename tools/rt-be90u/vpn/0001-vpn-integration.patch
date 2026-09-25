@@ -84,7 +84,7 @@
 +++ b/release/src/router/extendno.conf
 @@ -1 +1 @@
 -EXTENDNO=58138-rtbe90u-dev1
-+EXTENDNO=58138-rtbe90u-dev5-vpn
++EXTENDNO=58138-rtbe90u-dev6-vpn
 --- a/release/src/router/httpd/Makefile
 +++ b/release/src/router/httpd/Makefile
 @@ -240,8 +240,8 @@
@@ -1559,3 +1559,80 @@
  #ifdef RTCONFIG_TPVPN
  	{ "vpn_client_tp", "", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
  	{ "vpn_client_tp_region", "", CKN_STR_DEFAULT, CKN_TYPE_DEFAULT, CKN_ACC_LEVEL_DEFAULT, CKN_ENC_DEFAULT, 0 },
+--- a/release/src/router/libovpn/amvpn_routing.c
++++ b/release/src/router/libovpn/amvpn_routing.c
+@@ -871,6 +871,50 @@
+ }
+ 
+ 
++/* Keep the same selectors as the Director rule, including destination-only and
++ * catch-all policies. An omitted selector means all, just as in routing rules.
++ */
++static void amvpn_add_policy_killswitch(char *src, char *dst, char *prio)
++{
++	char *destination = (*dst && strcmp(dst, "0.0.0.0")) ? dst : "all";
++#ifdef RTCONFIG_MULTILAN_CFG
++	MTLAN_T *pmtl;
++	size_t mtl_sz = 0;
++	int i, j;
++#endif
++
++	if (*src && strcmp(src, "0.0.0.0") && strcmp(src, "0.0.0.0/0")) {
++		eval("ip", "rule", "add", "from", src, "to", destination,
++		     "priority", prio, "prohibit");
++		return;
++	}
++
++	/* Wildcard source policies protect forwarded LAN traffic. Blocking locally
++	 * originated traffic here would prevent the tunnel from reconnecting.
++	 */
++	eval("ip", "rule", "add", "iif", nvram_safe_get("lan_ifname"),
++	     "to", destination, "priority", prio, "prohibit");
++#ifdef RTCONFIG_MULTILAN_CFG
++	pmtl = (MTLAN_T *)INIT_MTLAN(sizeof(MTLAN_T));
++	if (pmtl) {
++		get_mtlan(pmtl, &mtl_sz);
++		for (i = 1; i < mtl_sz; ++i) {
++			if (!pmtl[i].enable || !*pmtl[i].nw_t.ifname ||
++			    !strcmp(pmtl[i].nw_t.ifname, nvram_safe_get("lan_ifname")))
++				continue;
++			for (j = 1; j < i; ++j)
++				if (pmtl[j].enable && !strcmp(pmtl[j].nw_t.ifname, pmtl[i].nw_t.ifname))
++					break;
++			if (j < i)
++				continue;
++			eval("ip", "rule", "add", "iif", pmtl[i].nw_t.ifname,
++			     "to", destination, "priority", prio, "prohibit");
++		}
++		FREE_MTLAN((void *)pmtl);
++	}
++#endif
++}
++
+ void amvpn_set_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifname) {
+ 	char buffer[8000], prefix[32], prio_str[6];
+ 	char *buffer_tmp, *buffer_tmp2, *rule;
+@@ -918,9 +962,9 @@
+ 				if (!strcmp(target,"WAN"))
+ 					continue;
+ 
+-				if (!strncmp(target, "OVPN", 4) && *src && strcmp(src, "0.0.0.0")) {
++				if (!strncmp(target, "OVPN", 4)) {
+ 					// Create deny rule
+-					eval("ip", "rule", "add", "from", src, "priority", prio_str, "prohibit");
++					amvpn_add_policy_killswitch(src, dst, prio_str);
+ 					if (verb > 3)
+ 						logmessage("openvpn-routing","Setting killswitch rule for %s", src);
+ 				}
+@@ -982,9 +1026,9 @@
+ 			if (!strcmp(target,"WAN"))
+ 				continue;
+ 
+-			if (!strncmp(target, "WGC", 3) && *src && strcmp(src, "0.0.0.0")) {
++			if (!strncmp(target, "WGC", 3)) {
+ 				// Create deny rule
+-				eval("ip", "rule", "add", "from", src, "priority", prio_str, "prohibit");
++				amvpn_add_policy_killswitch(src, dst, prio_str);
+ 				if (verb > 3)
+ 					logmessage("openvpn-routing","Setting killswitch rule for %s", src);
+ 			}

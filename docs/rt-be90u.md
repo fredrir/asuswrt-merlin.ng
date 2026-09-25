@@ -1,8 +1,18 @@
 # RT-BE90U port
 
+The latest checkpoint is `dev6-vpn` (2026-09-26). It fixes IPv4 VPN Director
+kill switches for destination-only and catch-all rules, preserves destination
+selectors, and keeps wildcard rules from blocking the router's own reconnection
+traffic. It is **not ready to flash**. IPv6 bypasses the imported IPv4 policy
+kill switches; full tunnel lifecycle and physical recovery remain unverified.
+An actual daemon probe also found that the vendor OpenVPN 2.4.12 rejects the
+imported configuration's `data-ciphers` option. Dev6 retains this startup blocker;
+the next candidate must update the daemon and validate generated configurations.
+See [recovery readiness](rt-be90u-recovery.md) before planning a hardware test.
+
 | Name | Value |
 | --- | --- |
-| Status | Experimental ASUS-based image with Merlin-compatible extension hooks built; full Merlin integration unfinished; nothing flashed |
+| Status | Experimental dev6 VPN image built and tested offline; IPv6 policy protection and full Merlin integration unfinished; nothing flashed |
 | Requested scope | JFFS scripts, Entware, custom service configuration, VPN/DNS/network controls, broad Merlin compatibility |
 | Hardware inspected | 2026-09-25, stock firmware over SSH |
 | `productid` | `TUF-BE9400` |
@@ -164,7 +174,7 @@ Patches apply only to the verified Qualcomm GPL archive. Existing Broadcom sourc
 | Enable switch | Administration → System → Enable JFFS custom scripts and configs |
 | Default | Disabled; an absent `jffs2_scripts` setting also disables execution |
 | Persistent directories | `/jffs/scripts`, `/jffs/configs`, `/jffs/addons`; initialized through the Qualcomm UBIFS path |
-| Script API | Merlin names, argument order, blocking timeouts and background execution conventions |
+| Script API | Merlin names, argument order, blocking timeouts and background execution conventions; dev6 ARM shared-library execution through real Entware rc.unslung tested below |
 | Service events | `init-start`, `services-start`, `services-stop`, `service-event`, `service-event-end` |
 | Network events | `wan-event`, `wan-start`, `firewall-start`, `nat-start`, `dhcpc-event`, `zcip-event` |
 | Storage events | `pre-mount`, `post-mount`, `unmount` |
@@ -172,7 +182,7 @@ Patches apply only to the verified Qualcomm GPL archive. Existing Broadcom sourc
 | OpenVPN events | `openvpn-event` with six arguments and the inherited OpenVPN environment; includes VPN Fusion route callbacks |
 | Config extensions | Account files, hosts, dnsmasq, Stubby, Inadyn, UPnP, Avahi, FTP, IGMP proxy, WireGuard and IPsec |
 | Per-network DNS | `dnsmasq-sdn.postconf`, `stubby-sdn.postconf`, indexed `.add` files |
-| Entware prerequisites | `/opt`, `cru`, USB lifecycle hooks and custom scripts; package execution under QEMU passes; USB installation and service lifecycle tests pending |
+| Entware prerequisites | `/opt`, `cru`, USB lifecycle hooks and custom scripts; package installation and hook/rc.unslung fixture pass; physical USB and boot/hotplug lifecycle pending |
 | VPN engine | Default extension image retains ASUS `libvpn.so`; the separate development variant below uses Merlin `libovpn` |
 | VPN ABI audit | Only source-built `rc` and `httpd` depend on stock `libvpn`; Merlin key enums and config structs differ, so consumers must be recompiled together; ASUS's 256-byte password field retained |
 | ELF linkage check | Extension and VPN development images pass recursive library, AArch64 and required-symbol checks for `rc` (26 objects) and `httpd` (23 objects); no program execution |
@@ -236,9 +246,9 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Status | Build and offline testing only; not ready to flash |
 | Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
 | Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
-| Version | `58138-rtbe90u-dev5-vpn` |
-| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev5-vpn.trx`; 59,007,529 bytes |
-| SHA-256 | `56d05556bc49b2a7c7465e221a3d8fb51e3a53c5a0240b983e8262f2c830695c` |
+| Version | `58138-rtbe90u-dev6-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev6-vpn.trx`; 59,007,949 bytes |
+| SHA-256 | `320e3c5595abbb8a7877ba0f292595ed883bb64743f94bc66b0fb9c17778f79f` |
 | Superseded build | `dev2-vpn` omitted `RTCONFIG_VPN_FUSION_MERLIN` because the SDK selected a different target file; its library tests did not establish the routing build configuration |
 | Configuration guard | Both target files enable Merlin VPN integration; compilation and ARM tests reject configurations without that switch |
 | Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
@@ -249,17 +259,17 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Credential compatibility | Retains the ASUS 256-byte password field; certificate names and private-file permissions tested |
 | Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
 | ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
-| Source integrity | All 61 inputs match the pre-build manifest from fresh preparation in `experimental-vpn-dev5-58138` |
-| Build | Fresh source preparation and full build exited 0; `logs/vpn-dev5-prepare.log` and `logs/vpn-dev5-build.log` on `archie` |
+| Source integrity | All 61 inputs match the pre-build manifest from fresh preparation in `experimental-vpn-dev6-58138` |
+| Build | Fresh preparation; build interrupted before packaging to refine wildcard rules, then resumed successfully; all final inputs match independent fresh preparation in `experimental-vpn-dev6-repro-58138` |
 | Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector returns disabled; `rc` is byte-identical to the previously inspected `dev4-vpn` binary |
 | Regression checks | ARM test rejects `dev2-vpn`; browser tests reproduce `dev3-vpn` UI/save failures and `dev4-vpn` extra-certificate loss |
 | Browser fixes | Import VPN Director icons and retain them during packaging; add Merlin name validation; process generic VPN settings after their profile selectors |
 | Certificate fixes | Save extra certificates and submitted generic-key values; read and accept up to 7,999 bytes; reject oversized indexed and generic submissions |
 | Browser result | Six pages/tabs, VPN Director CRUD, OpenVPN settings, certificates, long chains, profile import/isolation and WireGuard settings pass against the extracted final image |
 | Artifact checks | Both CRCs valid; fits observed UBI volume; no missing libraries or required symbols; all runtime ELF files AArch64; Qualcomm coprocessor firmware unchanged |
-| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev5-58138` and `image-audit-vpn-dev5` on `archie`; results in `logs/vpn-dev5-*` |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev6-58138` and `image-audit-vpn-dev6` on `archie`; results in `logs/vpn-dev6-*` |
 | Current-router migration | Read-only inspection found no Fusion profiles, device policies, default VPN or SDN VPN assignments; no VPN assignments need conversion on this router |
-| Remaining work | General stock VPN Fusion/SDN migration; route, DNS-leak and kill-switch tests; add-on APIs; remaining UI paths; hardware validation |
+| Remaining work | Real encrypted tunnel/service lifecycle; IPv6 policy protection; general stock VPN Fusion/SDN migration; add-on APIs; remaining UI paths; recovery and hardware validation |
 
 The supplied Merlin checkout must contain commit `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`.
 
@@ -284,6 +294,10 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
 ```
 
 ## VPN browser tests
+
+The same suite passed on the final extracted dev6 image using local Chromium on
+Arch Linux. Evidence: `logs/vpn-dev6-browser.log` and `logs/vpn-dev6-httpd.log`.
+The table below retains the earlier dev5 test provenance.
 
 | Name | Value |
 | --- | --- |
@@ -331,6 +345,9 @@ docker network rm rt-be90u-http-test
 
 ## Entware binary compatibility
 
+The original dev5 execution fixture remains available. The separate complete
+installation fixture and its dev6 results are documented below.
+
 | Name | Value |
 | --- | --- |
 | Feed | [Entware AArch64](https://github.com/Entware/Entware/wiki#installation), `aarch64-k3.10` |
@@ -352,3 +369,99 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
   --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
   rt-be90u-test:58138 sh /tests/run-entware-test.sh
 ```
+
+## Dev6 packet enforcement tests
+
+`tests/run-vpn-network-test.sh` executes the final image's ARM `libovpn` with
+synthetic NVRAM. Its `system()` and `_eval()` calls execute real commands.
+Native `dash`, `iproute2` and `iptables-nft` replace those utilities in a disposable
+copy because this QEMU/host combination cannot execute the firmware's legacy
+network utilities correctly. No global binfmt handler is registered.
+
+The container starts with only loopback. Tests create veth LAN/SDN links and dummy
+WAN/VPN links, inject Ethernet frames and inspect emitted packets. These are real
+kernel routing/NAT tests with simulated tunnel interfaces, not encrypted tunnels
+or the router's kernel/firewall. The current evidence used Linux `7.2.6-arch2-1`,
+iproute2 `ss200127`, and iptables `1.8.4` with nftables.
+
+| Coverage | Result |
+| --- | --- |
+| OpenVPN and WireGuard source policy, WAN exemption, disabled policy | Packets use the expected egress |
+| UDP/TCP port-53 exclusive DNS | VPN DNAT and WAN exemption pass |
+| Policy removal and empty VPN routing table | Protected IPv4 packets, including DNS, cannot reach WAN |
+| Policy/route reapplication | Forwarding resumes through the simulated VPN link |
+| Destination-only, source-and-destination and wildcard kill switches | Pass; unrelated destinations remain reachable |
+| Router-originated traffic with wildcard kill switch | WAN route remains available for tunnel reconnection |
+| Repeated application | No duplicate policy kill-switch rules |
+| Explicit and NVRAM-associated SDN protection | Real parsing, blocking and removal pass |
+| Overlapping OVPN/WG policies | Routing priority, DNS order, configured fallback and final blocking pass |
+| Global OpenVPN mode | LAN and SDN IPv4 protection passes |
+| IPv6 DNS with global kill switch | **Known gap: packet escapes through WAN** |
+| Dev5 regression | Destination-only traffic escapes through WAN for both OVPN and WG |
+
+The IPv6 probe deliberately records the gap rather than counting it as protection.
+The suite's successful exit establishes the IPv4 assertions only. It does not
+cover encrypted DNS, actual handshakes, daemon reconnect timing, all firewall
+chains, acceleration or router-originated DNS proxy behavior.
+
+From the repository root, substitute absolute final-image and matching SDK paths:
+
+```sh
+docker build -f tools/rt-be90u/tests/Dockerfile.network \
+  -t rt-be90u-network-test:58138 tools/rt-be90u/tests
+docker run --rm --network none --cap-add NET_ADMIN --read-only --ulimit core=0 \
+  --sysctl net.ipv4.ip_forward=1 \
+  --sysctl net.ipv4.conf.all.rp_filter=0 --sysctl net.ipv4.conf.default.rp_filter=0 \
+  --sysctl net.ipv6.conf.all.forwarding=1 \
+  --tmpfs /tmp:exec,size=512m --tmpfs /etc/iproute2 \
+  --mount type=bind,src=/absolute/path/to/rootfs,dst=/firmware,readonly \
+  --mount type=bind,src=/absolute/path/to/asuswrt,dst=/work,readonly \
+  --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
+  rt-be90u-network-test:58138 sh /tests/run-vpn-network-test.sh
+```
+
+`--protocol ovpn` or `--protocol wg`, appended after the script name, isolates a
+protocol's cases. The mixed-policy and IPv6 probes run with the default `both`.
+The fixture refuses existing network interfaces; do not use host networking.
+Docker removes all test links/rules with the container. No host routes, router
+configuration or unrelated containers are modified.
+
+Evidence on `archie`: `logs/vpn-dev6-network.log`,
+`logs/network-dev6/dev5-regression.log`, `logs/vpn-dev5-wg-network-regression.log`.
+The failed intermediate wildcard implementation is retained in
+`logs/network-dev6/reconnect-regression.log`; it was corrected before packaging.
+
+## Dev6 Entware installation and hook execution
+
+`entware-install-fixture.json` pins `entware-opt` and its complete dependency
+closure (18 packages), plus the bootstrap opkg. The original smaller fixture is
+unchanged. Downloading does not install anything:
+
+```sh
+python3 tools/rt-be90u/prepare-entware-test.py --install /new/entware-install-packages
+docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,size=512m \
+  --mount type=bind,src=/absolute/path/to/rootfs,dst=/firmware,readonly \
+  --mount type=bind,src=/new/entware-install-packages,dst=/packages,readonly \
+  --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
+  rt-be90u-network-test:58138 sh /tests/run-entware-install-test.sh
+```
+
+The fixture keeps `/opt -> tmp/opt` and points `tmp/opt` to a simulated USB
+directory. Actual ARM opkg installs the packages in offline mode; installed
+post-install scripts are then invoked explicitly after adding QEMU launchers.
+Native BusyBox supplies the shell and several utilities. ARM gzip, GNU find,
+grep and locale tools run through explicit launchers. This arrangement is not
+an execution test of the downloaded online installer or the firmware shell.
+
+The image's actual ARM `libshared` calls `run_custom_script()` without execution
+stubs. Disabled hooks do not run. Enabled `services-start` and `services-stop`
+invoke Entware's installed `rc.unslung`, which starts a fixture ARM process and
+stops it in reverse service order. The harness verifies the daemon's readiness
+PID and running state before stopping it, then verifies termination and retained
+storage files. No live USB device is mounted or formatted.
+
+All assertions and explicit post-install scripts pass on dev6. Evidence:
+`logs/vpn-dev6-entware-install.log`. Real USB mounting, power/reboot persistence,
+hotplug order, `rc.func` daemon handling and third-party add-ons remain untested.
+The user confirmed the router has a USB port; availability of a USB drive has not
+been confirmed.
