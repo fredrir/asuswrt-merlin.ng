@@ -236,9 +236,9 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Status | Build and offline testing only; not ready to flash |
 | Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
 | Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
-| Version | `58138-rtbe90u-dev4-vpn` |
-| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev4-vpn.trx`; 59,007,869 bytes |
-| SHA-256 | `400e5f6ae9b094e941235fde3bc60393564c03ec60bb2305f93e08b3be9444c1` |
+| Version | `58138-rtbe90u-dev5-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev5-vpn.trx`; 59,007,529 bytes |
+| SHA-256 | `56d05556bc49b2a7c7465e221a3d8fb51e3a53c5a0240b983e8262f2c830695c` |
 | Superseded build | `dev2-vpn` omitted `RTCONFIG_VPN_FUSION_MERLIN` because the SDK selected a different target file; its library tests did not establish the routing build configuration |
 | Configuration guard | Both target files enable Merlin VPN integration; compilation and ARM tests reject configurations without that switch |
 | Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
@@ -249,15 +249,17 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Credential compatibility | Retains the ASUS 256-byte password field; certificate names and private-file permissions tested |
 | Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
 | ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
-| Source integrity | All 61 inputs match fresh preparation in `experimental-vpn-dev4-repro-58138`, including the active target file and web packaging rules |
-| Build | Clean build followed by web packaging correction and rebuild; both exited 0; `logs/vpn-dev4-build.log` and `logs/vpn-dev4-initial/vpn-dev4-build.log` on `archie` |
-| Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector disassembly returns disabled |
-| Regression checks | ARM test rejects `dev2-vpn`; browser tests reproduce `dev3-vpn` missing icons, missing name validator and profile-setting loss |
+| Source integrity | All 61 inputs match the pre-build manifest from fresh preparation in `experimental-vpn-dev5-58138` |
+| Build | Fresh source preparation and full build exited 0; `logs/vpn-dev5-prepare.log` and `logs/vpn-dev5-build.log` on `archie` |
+| Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector returns disabled; `rc` is byte-identical to the previously inspected `dev4-vpn` binary |
+| Regression checks | ARM test rejects `dev2-vpn`; browser tests reproduce `dev3-vpn` UI/save failures and `dev4-vpn` extra-certificate loss |
 | Browser fixes | Import VPN Director icons and retain them during packaging; add Merlin name validation; process generic VPN settings after their profile selectors |
-| Browser result | All six pages and tabs, VPN Director CRUD, OpenVPN save/clear and profile isolation, WireGuard settings pass against the extracted final image |
+| Certificate fixes | Save extra certificates and submitted generic-key values; read and accept up to 7,999 bytes; reject oversized indexed and generic submissions |
+| Browser result | Six pages/tabs, VPN Director CRUD, OpenVPN settings, certificates, long chains, profile import/isolation and WireGuard settings pass against the extracted final image |
 | Artifact checks | Both CRCs valid; fits observed UBI volume; no missing libraries or required symbols; all runtime ELF files AArch64; Qualcomm coprocessor firmware unchanged |
-| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev4-58138` and `image-audit-vpn-dev4` on `archie`; results in `logs/vpn-dev4-*` |
-| Remaining work | Stock VPN Fusion/SDN settings migration; remaining UI paths (certificate editing/imports); route, DNS-leak and kill-switch tests; add-on APIs; hardware validation |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev5-58138` and `image-audit-vpn-dev5` on `archie`; results in `logs/vpn-dev5-*` |
+| Current-router migration | Read-only inspection found no Fusion profiles, device policies, default VPN or SDN VPN assignments; no VPN assignments need conversion on this router |
+| Remaining work | General stock VPN Fusion/SDN migration; route, DNS-leak and kill-switch tests; add-on APIs; remaining UI paths; hardware validation |
 
 The supplied Merlin checkout must contain commit `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`.
 
@@ -286,10 +288,11 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
 | Name | Value |
 | --- | --- |
 | Server | Extracted image HTTP binary and libraries under QEMU; disposable filesystem copy |
-| Fixture | `tests/run-httpd.sh`, `httpd-nvram.c`; synthetic NVRAM and credentials; service and shell execution intercepted |
-| Browser | Pinned Playwright/Chromium; requires the fixture marker before login or writes; localhost only |
-| Coverage | Six VPN pages and menu tabs; VPN Director create/edit/disable/delete; OpenVPN client/server save/clear; client profile isolation; WireGuard settings |
-| Evidence | `logs/vpn-dev4-browser.log` and `logs/vpn-dev4-httpd.log` on `archie`; local `artifacts/dev4-vpn-validation/` includes regression logs |
+| Fixture | `tests/run-httpd.sh`, `httpd-nvram.c`; synthetic NVRAM, completed setup and credentials; service and shell execution intercepted |
+| Browser | Pinned Playwright/Chromium; requires the fixture marker before login or writes; localhost fixture; external HTTP/HTTPS blocked by a local proxy |
+| Dependencies | Node.js, pinned Playwright/Chromium and OpenSSL CLI; certificates are generated in a temporary directory and removed after the test |
+| Coverage | Six VPN pages/tabs; VPN Director CRUD; OpenVPN client/server settings and certificates; long chains, oversized input, profile imports/isolation; WireGuard settings |
+| Evidence | `logs/vpn-dev5-browser.log` and `logs/vpn-dev5-httpd.log` on `archie`; local `artifacts/dev5-vpn-validation/` includes regression logs |
 | Limits | No router NVRAM persistence, VPN process execution, tunnels, routes or packet filtering |
 
 On the Linux builder, from the repository root:
@@ -333,10 +336,10 @@ docker network rm rt-be90u-http-test
 | Feed | [Entware AArch64](https://github.com/Entware/Entware/wiki#installation), `aarch64-k3.10` |
 | Fixture | `tests/entware-fixture.json`; fixed package filenames and SHA-256 hashes |
 | Downloads | `prepare-entware-test.py NEW_DIRECTORY`; verifies hashes before making the completed directory available; leaves existing directories unchanged |
-| Runtime | Extracted `dev4-vpn` filesystem in a disposable, network-disabled container; firmware `/opt` link preserved |
+| Runtime | Extracted `dev5-vpn` filesystem in a disposable, network-disabled container; firmware `/opt` link preserved |
 | Passed | Static `opkg` reads the architecture configuration; dynamically linked GNU `find` 4.10.0 loads Entware's glibc and finds a fixture file |
 | Failure checks | Existing download directory rejected; corrupt bootstrap rejected before extraction or execution |
-| Evidence | `archie:~/projects/rt-be90u-port/logs/vpn-dev4-entware-test.log` and `logs/entware-negative-tests.log` |
+| Evidence | `archie:~/projects/rt-be90u-port/logs/vpn-dev5-entware-test.log` and `logs/entware-negative-tests.log` |
 | Limits | QEMU uses the build host's kernel; package installation scripts, USB mounts, boot/shutdown services and router execution remain untested |
 
 The package payloads are extracted only in the test container; the installer and package scripts are not executed.

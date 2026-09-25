@@ -1,5 +1,10 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
+const { execFileSync } = require('node:child_process');
+const { mkdtempSync, readFileSync, rmSync } = require('node:fs');
+const { createServer } = require('node:http');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
 
 const baseURL = process.env.RTBE90U_TEST_URL || 'http://127.0.0.1:18090';
 assert.equal(new URL(baseURL).origin, baseURL, 'Use an origin without a path');
@@ -11,15 +16,29 @@ const paths = [
 ];
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const certificates = mkdtempSync(join(tmpdir(), 'rtbe90u-certificates-'));
+  const blockedProxy = createServer(request => request.destroy());
+  blockedProxy.on('connect', (_request, socket) => socket.destroy());
+  let browser;
   try {
+    await new Promise((resolve, reject) => {
+      blockedProxy.once('error', reject);
+      blockedProxy.listen(0, '127.0.0.1', resolve);
+    });
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+      '-keyout', join(certificates, 'key.pem'), '-out', join(certificates, 'cert.pem'),
+      '-days', '1', '-subj', '/CN=rtbe90u-fixture.invalid'], { stdio: 'ignore' });
+    const certificate = readFileSync(join(certificates, 'cert.pem'), 'utf8');
+    const privateKey = readFileSync(join(certificates, 'key.pem'), 'utf8');
+    const chain = certificate.repeat(6);
+    assert(chain.length > 4000 && chain.length < 7999);
+    // Blocking proxy keeps external traffic offline without intercepting the UI's synchronous XHRs.
+    browser = await chromium.launch({ headless: true, proxy: {
+      server: `http://127.0.0.1:${blockedProxy.address().port}`, bypass: '127.0.0.1'
+    } });
     const context = await browser.newContext({ baseURL });
     context.setDefaultTimeout(10000);
     context.setDefaultNavigationTimeout(30000);
-    await context.route('**/*', route => {
-      if (new URL(route.request().url()).origin === baseURL) return route.continue();
-      return route.abort();
-    });
     const marker = await context.request.get('/Main_Login.asp');
     assert((await marker.text()).includes('RTBE90U_HTTPD_FIXTURE'), 'Refusing to modify a non-fixture server');
     const login = await context.request.post('/login.cgi', {
@@ -32,28 +51,46 @@ const paths = [
     assert.equal(login.status(), 200);
     assert((await context.cookies()).some(cookie => cookie.name === 'asus_token'), 'Fixture login failed');
 
-    const page = await context.newPage();
+    let page;
     const errors = [];
     let expectedConfirmation = false;
-    page.on('pageerror', error => errors.push(error.stack));
-    page.on('response', response => {
-      if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
+    context.on('page', opened => {
+      opened.on('pageerror', error => errors.push(error.stack));
+      opened.on('response', response => {
+        if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
+      });
+      opened.on('dialog', async dialog => {
+        if (expectedConfirmation && dialog.type() === 'confirm') {
+          expectedConfirmation = false;
+          await dialog.accept();
+        } else {
+          errors.push('Unexpected dialog: ' + dialog.message());
+          await dialog.dismiss();
+        }
+      });
     });
-    page.on('dialog', async dialog => {
-      if (expectedConfirmation && dialog.type() === 'confirm') {
-        expectedConfirmation = false;
-        await dialog.accept();
-      } else {
-        errors.push('Unexpected dialog: ' + dialog.message());
-        await dialog.dismiss();
-      }
-    });
+    page = await context.newPage();
     const healthy = () => assert.deepEqual(errors, [], 'Browser errors');
+    async function ready() {
+      await page.waitForFunction(() => document.querySelector('#tabMenu').children.length > 0);
+      if ([paths[1], paths[2]].some(path => page.url().endsWith('/' + path))) {
+        await page.waitForFunction(() => typeof vpn_crt_client1_ca !== 'undefined');
+      }
+      healthy();
+    }
     async function open(path) {
       await page.goto('/' + path);
-      await page.waitForFunction(() => document.querySelector('#tabMenu').children.length > 0);
+      await ready();
       assert.equal(new URL(page.url()).pathname, '/' + path, 'Unexpected setup/login redirect');
       healthy();
+    }
+    async function reopen() {
+      const url = page.url();
+      // End the old page's polling and delayed iframe redirects before reading saved values.
+      await page.close();
+      page = await context.newPage();
+      await page.goto(url);
+      await ready();
     }
     async function apply() {
       try {
@@ -63,11 +100,11 @@ const paths = [
         ]);
         assert.equal(response.status(), 200);
         await response.finished();
+        await response.frame().waitForURL('**/start_apply.htm', { waitUntil: 'load' });
       } finally {
         healthy();
       }
-      await page.reload();
-      healthy();
+      await reopen();
     }
     const field = name => page.locator(`form[name="form"] [name="${name}"]`);
     async function selectClient(unit) {
@@ -76,8 +113,8 @@ const paths = [
         page.waitForNavigation({ waitUntil: 'load' }),
         field('vpn_client_unit').selectOption(unit)
       ]);
+      await ready();
       await value('vpn_client_unit', unit);
-      healthy();
     }
     async function value(name, expected) {
       assert.equal(await field(name).inputValue(), expected, name + ' did not survive reload');
@@ -103,20 +140,20 @@ const paths = [
     await page.locator('#iface_x').selectOption('OVPN1');
     await page.locator('#saveRule').click();
     await apply();
-    const row = page.locator('[row_tr_idx]').filter({ hasText: 'fixture-route' });
-    assert.equal(await row.count(), 1);
-    assert((await row.innerText()).includes('192.0.2.0/24'));
-    await row.locator('img[title="Enabled"]').hover();
-    await row.locator('img[title="Enabled"]').click();
-    await row.locator('img[title="Disabled"]').hover();
-    await row.locator('.edit_btn').click();
+    const row = () => page.locator('[row_tr_idx]').filter({ hasText: 'fixture-route' });
+    assert.equal(await row().count(), 1);
+    assert((await row().innerText()).includes('192.0.2.0/24'));
+    await row().locator('img[title="Enabled"]').hover();
+    await row().locator('img[title="Enabled"]').click();
+    await row().locator('img[title="Disabled"]').hover();
+    await row().locator('.edit_btn').click();
     await page.locator('#remoteIP_x').fill('203.0.113.0/24');
     await page.locator('#saveRule').click();
     await apply();
-    assert.equal(await row.locator('img[title="Disabled"]').count(), 1);
-    assert((await row.innerText()).includes('203.0.113.0/24'));
+    assert.equal(await row().locator('img[title="Disabled"]').count(), 1);
+    assert((await row().innerText()).includes('203.0.113.0/24'));
     expectedConfirmation = true;
-    await row.locator('.remove_btn').click();
+    await row().locator('.remove_btn').click();
     await apply();
     assert.equal(await page.locator('[row_tr_idx]').count(), 0);
     console.log('PASS VPN Director create, disable, edit, delete and reload');
@@ -152,6 +189,62 @@ const paths = [
     await apply();
     await value('vpn_client_custom3', '');
     console.log('PASS OpenVPN client credentials, ciphers, profile isolation and custom save/clear');
+    await page.locator('[onclick="edit_Keys();"]').click();
+    await page.locator('#edit_vpn_crt_client_ca').fill(certificate);
+    await page.locator('#edit_vpn_crt_client_key').fill(privateKey);
+    await page.locator('#edit_vpn_crt_client_extra').fill(chain);
+    await page.locator('[onclick="save_Keys();"]').click();
+    await apply();
+    await page.locator('[onclick="edit_Keys();"]').click();
+    assert.equal(await page.locator('#edit_vpn_crt_client_ca').inputValue(), certificate);
+    assert.equal(await page.locator('#edit_vpn_crt_client_key').inputValue(), privateKey);
+    assert.equal(await page.locator('#edit_vpn_crt_client_extra').inputValue(), chain);
+    await page.locator('[onclick="cancel_Keys();"]').click();
+    await selectClient('2');
+    const profile = 'client\ndev tun\nproto udp\nremote import.example.test 1443\nremote-cert-tls server\n' +
+      '<ca>\n' + certificate + '</ca>\n<cert>\n' + certificate + '</cert>\n<key>\n' + privateKey +
+      '</key>\n<extra-certs>\n' + chain + '</extra-certs>\n';
+    await page.locator('#ovpnfile').setInputFiles({
+      name: 'fixture.ovpn', mimeType: 'application/octet-stream', buffer: Buffer.from(profile)
+    });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'load' }),
+      page.locator('[onclick="ImportOvpn();"]').click()
+    ]);
+    await ready();
+    await value('vpn_client_unit', '2');
+    await value('vpn_client_addr', 'import.example.test');
+    await value('vpn_client_port', '1443');
+    assert.equal(await page.locator('#edit_vpn_crt_client_ca').inputValue(), certificate);
+    assert.equal(await page.locator('#edit_vpn_crt_client_key').inputValue(), privateKey);
+    assert.equal(await page.locator('#edit_vpn_crt_client_extra').inputValue(), chain);
+
+    async function postKeys(form) {
+      const response = await context.request.post('/start_apply.htm', {
+        headers: { Referer: page.url() },
+        form: { action_mode: 'apply', action_script: '', action_wait: '0', ...form }
+      });
+      assert.equal(response.status(), 200);
+      await reopen();
+    }
+    await postKeys({ vpn_client_unit: '2', vpn_crt_client_ca: chain });
+    assert.equal(await page.locator('#edit_vpn_crt_client_ca').inputValue(), chain);
+    await postKeys({ vpn_client_unit: '2', vpn_crt_client_ca: certificate.repeat(8) });
+    assert.equal(await page.locator('#edit_vpn_crt_client_ca').inputValue(), chain, 'Oversized input changed the certificate');
+    await postKeys({ vpn_crt_client2_ca: certificate.repeat(8) });
+    assert.equal(await page.locator('#edit_vpn_crt_client_ca').inputValue(), chain, 'Oversized indexed input changed the certificate');
+    await postKeys({ vpn_client_unit: '2', vpn_crt_client_ca: '', vpn_crt_client_extra: '' });
+    assert.equal(await page.locator('#edit_vpn_crt_client_ca').inputValue(), '');
+    assert.equal(await page.locator('#edit_vpn_crt_client_extra').inputValue(), '');
+    await selectClient('1');
+    assert.equal(await page.locator('#edit_vpn_crt_client_ca').inputValue(), certificate);
+    assert.equal(await page.locator('#edit_vpn_crt_client_extra').inputValue(), chain);
+    await page.locator('[onclick="edit_Keys();"]').click();
+    await page.locator('#edit_vpn_crt_client_extra').fill('');
+    await page.locator('[onclick="save_Keys();"]').click();
+    await apply();
+    assert.equal(await page.locator('#edit_vpn_crt_client_extra').inputValue(), '');
+    console.log('PASS OpenVPN certificate editing, long chains, import, clearing and profile isolation');
 
     await open(paths[2]);
     if (!(await page.locator('#selSwitchMode').isVisible())) await page.locator('#radio_VPNServer_enable').click();
@@ -167,6 +260,26 @@ const paths = [
     await apply();
     await value('vpn_server_custom3', '');
     console.log('PASS OpenVPN server port and custom save/clear');
+    if (!(await page.locator('#selSwitchMode').isVisible())) await page.locator('#radio_VPNServer_enable').click();
+    await page.locator('#selSwitchMode').selectOption('2');
+    await page.locator('[onclick="edit_Keys();"]').click();
+    await page.locator('#edit_vpn_crt_server_ca').fill(certificate);
+    await page.locator('#edit_vpn_crt_server_key').fill(privateKey);
+    await page.locator('#edit_vpn_crt_server_extra').fill(chain);
+    const savedKeys = page.waitForResponse(response => response.url().endsWith('/start_apply.htm'));
+    await page.locator('[onclick="save_keys();"]').click();
+    const keysResponse = await savedKeys;
+    assert.equal(keysResponse.status(), 200);
+    await keysResponse.finished();
+    await keysResponse.frame().waitForURL('**/start_apply.htm', { waitUntil: 'load' });
+    await reopen();
+    assert.equal(await page.locator('#edit_vpn_crt_server_ca').inputValue(), certificate);
+    assert.equal(await page.locator('#edit_vpn_crt_server_key').inputValue(), privateKey);
+    assert.equal(await page.locator('#edit_vpn_crt_server_extra').inputValue(), chain);
+    await postKeys({ vpn_server_unit: '1', vpn_crt_server_ca: chain, vpn_crt_server_extra: '' });
+    assert.equal(await page.locator('#edit_vpn_crt_server_ca').inputValue(), chain);
+    assert.equal(await page.locator('#edit_vpn_crt_server_extra').inputValue(), '');
+    console.log('PASS OpenVPN server certificate editing and clearing');
 
     await open(paths[3]);
     await page.locator('[name="wgc_enable"][value="0"]').check();
@@ -184,6 +297,8 @@ const paths = [
     console.log('PASS WireGuard server port');
     healthy();
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
+    blockedProxy.close();
+    rmSync(certificates, { recursive: true, force: true });
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

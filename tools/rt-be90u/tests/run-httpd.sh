@@ -31,6 +31,10 @@ settings = {
     'productid': 'TUF-BE9400', 'odmpid': 'RT-BE90U',
     'firmver': '3.0.0.6', 'buildno': '102', 'extendno': 'rtbe90u-http-test',
     'sw_mode': '1', 'x_Setting': '1', 'p_Setting': '1', 'w_Setting': '1',
+    'ASUS_NEW_EULA': '1', 'ASUS_NEW_EULA_time': '2026-09-25T00:00:00Z',
+    # Synthetic policy version/time; SDK key names from webapi_get_b(3/4).
+    '68feaaa3': '2', '767cd197': '2026-09-25T00:00:00Z',
+    'TM_EULA': '0',
     'sdn_rl': '<0>TEST>1>0>0>0>0>0>0>0>0>0>0>0>0>0>0>0>0>WEB>0>0>0',
     'http_username': 'admin', 'http_passwd': 'rtbe90u-fixture',
     'lan_ifname': 'eth0', 'lan_ipaddr': '127.0.0.1', 'lan_netmask': '255.0.0.0',
