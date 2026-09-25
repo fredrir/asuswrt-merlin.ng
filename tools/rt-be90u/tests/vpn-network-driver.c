@@ -6,6 +6,8 @@
 #include <openvpn_config.h>
 #include <amvpn_routing.h>
 
+extern void ovpn_client_up_handler(int unit);
+
 #if !defined(RTCONFIG_SOC_IPQ53XX) || !defined(RTCONFIG_VPN_FUSION_MERLIN)
 #error "Test requires the RT-BE90U Merlin VPN build configuration"
 #endif
@@ -40,6 +42,8 @@ int main(int argc, char **argv)
 		amvpn_update_exclusive_dns_rules();
 	} else if (!strcmp(argv[1], "undns")) {
 		amvpn_clear_exclusive_dns(1, proto);
+	} else if (!strcmp(argv[1], "up")) {
+		ovpn_client_up_handler(1);
 	} else {
 		return 2;
 	}

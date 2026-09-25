@@ -1,5 +1,9 @@
 {
   "revision": "920b77f5f92db14717a27abd5c8e1b06ae6c8ec1",
+  "trees": [
+    "release/src/router/openvpn",
+    "release/src/router/libcap-ng"
+  ],
   "files": {
     "release/src/router/libovpn/.gitignore": "release/src/router/libovpn/.gitignore",
     "release/src/router/libovpn/Makefile": "release/src/router/libovpn/Makefile",

@@ -272,6 +272,22 @@ def exercise(fixture, protocol):
         fixture.packet('198.51.100.10', '203.0.113.99', 'wan0', iface='br1')
         fixture.sdn(0)
         print('PASS', proto, 'explicit and NVRAM-associated SDN kill switch and removal', flush=True)
+        if proto == 'ovpn':
+            fixture.rules('<1>missing gateway>192.0.2.10>>OVPN1')
+            fixture.env['dev'] = 'tun11'
+            fixture.call('kill', 'ovpn')
+            fixture.call('up', 'ovpn')
+            fixture.route('192.0.2.10', '203.0.113.99', None)
+            fixture.packet('192.0.2.10', '203.0.113.99', None)
+            fixture.packet('192.0.2.11', '203.0.113.99', 'wan0')
+            fixture.env['route_vpn_gateway'] = '10.2.0.2'
+            fixture.call('up', 'ovpn')
+            fixture.packet('192.0.2.10', '203.0.113.99', 'tun11')
+            for key in ('dev', 'route_vpn_gateway'):
+                del fixture.env[key]
+            fixture.call('clear', 'ovpn')
+            fixture.call('unkill', 'ovpn')
+            print('PASS actual OpenVPN up hook blocks missing-gateway WAN fallback and restores tunnel routing', flush=True)
     if protocol != 'both':
         return
     fixture.rules('<1>overlap>192.0.2.10>>OVPN1<1>overlap>192.0.2.10>>WGC1<1>wan>192.0.2.11>>WAN')

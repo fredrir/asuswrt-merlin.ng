@@ -8,8 +8,8 @@ to reboot, reset or flash. The development image is still not ready for that ste
 
 | Artifact | Identity |
 | --- | --- |
-| Experimental candidate | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev6-vpn.trx` |
-| Candidate size / SHA-256 | 59,007,949 bytes / `320e3c5595abbb8a7877ba0f292595ed883bb64743f94bc66b0fb9c17778f79f` |
+| Experimental candidate | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev8-vpn.trx` |
+| Candidate size / SHA-256 | 59,046,105 bytes / `975241675fb808c281e58d5195915f139361abae389f62d998d6e0d95e540b6b` |
 | Stock recovery archive | `FW_RT-BE90U_300610258500.zip` |
 | Stock archive SHA-256 | `05a5c8227f3ecc0724787bb333728d55449c6984a823f5143108ce649388df75` |
 | Extracted stock image SHA-256 | `2eb672afc3903cd664d569587c13113dcfc4c1b026acbc9cc8d7fb09441c502a` |
@@ -17,7 +17,7 @@ to reboot, reset or flash. The development image is still not ready for that ste
 | Observed linux volume | `0x0500b000` bytes; candidate fits |
 
 Artifacts are under `/home/fredrir/projects/rt-be90u-port` on `archie`:
-the candidate in `experimental-vpn-dev6-58138/asuswrt/release/src-qca-ipq53xx/image`,
+the candidate in `experimental-vpn-dev8-58138/asuswrt/release/src-qca-ipq53xx/image`,
 stock ZIP in `downloads`, and stock image/rootfs in `image-audit-official-58500`.
 Use the versioned BE9400 filename; the vendor's generic symlink selects BE6500.
 
@@ -25,7 +25,7 @@ Use the versioned BE9400 filename; the vendor's generic symlink selects BE6500.
 
 The candidate passes strict local model, uImage structure, CRC, payload length,
 load/entry address and observed volume-size checks. Its extracted runtime has
-791 AArch64 ELFs and the same 11 coprocessor firmware objects as the extension
+792 AArch64 ELFs and the same 11 coprocessor firmware objects as the extension
 baseline. Runtime library dependencies resolve. The firmware source configuration
 has `RTCONFIG_DUAL_TRX`, `RTCONFIG_DUAL_TRX2` and `RTCONFIG_TEMPROOTFS` enabled;
 `RTCONFIG_FITFDT`, `RTCONFIG_PIPEFW` and `RTCONFIG_SECUREBOOT` are disabled.
@@ -33,7 +33,7 @@ has `RTCONFIG_DUAL_TRX`, `RTCONFIG_DUAL_TRX2` and `RTCONFIG_TEMPROOTFS` enabled;
 The official 58500 image was extracted locally from the checksum-verified ASUS
 ZIP. Its actual `libshared.so` (`7415ffec462705b6bc20bf9b875021cb21cdc9d6ed86669ce6eee576a0199522`)
 was run under QEMU with synthetic model/version NVRAM. `check_imageheader()`
-accepts the dev6 candidate and reports the exact size; `check_imagefile()` returns
+accepts the dev8 candidate and reports the exact size; `check_imagefile()` returns
 0. Bad magic is rejected, and payload corruption is rejected. A checksum-correct
 wrong-model header is accepted by these isolated calls. Therefore these calls
 do **not** establish model/ODM enforcement or live upload acceptance. Keep the
@@ -49,7 +49,7 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
   rt-be90u-test:58138 sh /tests/run-image-runtime-test.sh
 ```
 
-Evidence: `logs/vpn-dev6-official-validator.log`. No upload endpoint or flash
+Evidence: `logs/vpn-dev8-official-validator.log`. No upload endpoint or flash
 utility is called, and no router NVRAM is accessed by this test.
 
 ## Dual images and firmware version
@@ -76,20 +76,73 @@ ASUS lists Firmware Restoration **2.1.0.3** for this model, with Windows support
 and ZIP SHA-256 `474e81da30e3ccf419e2ffab27f7c2309017bbf1472ada85bf15c8faa411a30f`.
 The tool has not been installed or tested here. [RT-BE90U downloads](https://www.asus.com/us/networking-iot-servers/wifi-routers/asus-wifi-routers/asus-rt-be90u/helpdesk_download?model2Name=ASUS-RT-BE90U)
 
-The user confirmed physical access and Ethernet on 2026-09-26. A computer with
-a usable recovery tool, a maintenance window and alternate connectivity still
-need confirmation before requesting a flash. Save the current settings through ASUS's backup UI and keep that
+The user confirmed physical access, Ethernet, Linux/macOS computers, and spare
+8 GB and 16 GB USB flash drives on 2026-09-26. Windows is unavailable. A tested
+recovery tool, a maintenance window and alternate connectivity still need
+confirmation before requesting a flash. Neither USB drive has been touched.
+Save the current settings through ASUS's backup UI and keep that
 credential-bearing backup private; no backup was collected by this work. Keep
 the stock image and its verified hash locally available without Internet access.
 Record the current computer network settings so they can be restored afterwards.
 
-The proposed recovery workflow, to be performed only after explicit approval,
-is a direct Ethernet connection, a static computer address `192.168.1.10/24`,
-and holding Reset while applying router power until the power LED flashes slowly.
-ASUS's utility then uploads the extracted stock image in rescue mode. Wait for
-completion and reboot before restoring the computer's network settings. This
-is ASUS's generic procedure, illustrated with another model; the button/LED
-behavior and transfer must still be verified on this RT-BE90U. [ASUS rescue-mode instructions](https://www.asus.com/support/faq/1000814/)
+ASUS's generic guide uses `192.168.1.10/24` on the computer and holds Reset
+while applying router power until the power LED flashes slowly. Its example is
+a different model, and its utility requires Windows. Do not assume its addresses
+or LEDs apply unchanged here. [ASUS rescue-mode instructions](https://www.asus.com/support/faq/1000814/)
+
+### Linux/macOS path from the model's vendor source
+
+The pinned GPL archive includes `release/src-qca-ipq53xx/uboot_v2016.01`.
+`README.ASUS` explicitly identifies the TUF-BE9400 target as RT-BE90U.
+`include/configs/tuf-be9400.h` defines router address `192.168.50.1/24`, default
+computer/server address `192.168.50.75`, and filename `TUF-BE9400.trx`.
+`common/Makefile` includes ASUS's `cmd_tftpServer.c` under `CONFIG_ASUS_PRODUCT`;
+the disabled generic `CONFIG_CMD_TFTPSRV` setting does not disable this service.
+
+`do_tftpd()` enters rescue on Reset; WPS instead selects a factory reset, so
+these buttons must not be confused. The ASUS server listens on UDP 69 and accepts
+ordinary TFTP WRQ and 512-byte data blocks, including a wrapping 16-bit block
+counter. Its WRQ handler retains the configured peer IP until an RRQ establishes
+another peer. A direct computer address of `192.168.50.75/24` therefore matches
+the source defaults. An ordinary RRQ returns an empty DATA block and updates
+the temporary peer; it does not write flash. No probe or upload has been sent.
+
+The proposed rehearsal is an isolated Ethernet link with saved computer network
+settings, followed by an approved power/Reset sequence and a probe of the rescue
+service. Verify the address and LED behavior before uploading anything. Then a
+binary-mode TFTP client can upload the verified stock image with remote filename
+`TUF-BE9400.trx`. Avoid TFTP block-size negotiation; this implementation uses 512
+bytes. A final data ACK confirms reception only: the source subsequently checks
+and writes the image, sends ASUS-specific completion packets, and reboots.
+Allow flashing to finish before changing power or networking. The rescue source
+writes both firmware volumes, too.
+
+`archie` already has curl 8.22.0 with TFTP support. The loopback-only
+`tests/tftp-client-test.py` test passed an empty-read probe and a complete binary
+transfer of the verified stock image using `--tftp-no-options`. It checked every
+512-byte block, sequence rollover beyond block 65535, length and final SHA-256.
+Evidence: `logs/recovery-tftp-client.log`. This validates the local client against
+a protocol fixture, not ASUS bootloader code or hardware.
+
+After approval, with the direct link configured and the router already in rescue,
+the following is a **probe only**; its expected result is a zero-byte file:
+
+```sh
+curl --silent --show-error --noproxy '*' --proto '=tftp' --tftp-no-options \
+  --max-time 5 --output /tmp/rt-be90u-rescue-probe.bin \
+  tftp://192.168.50.1/rt-be90u-probe
+```
+
+Stop after the probe and record the result. Do not infer a successful flash from
+a probe response. Uploading the stock image is a separate approved action.
+The source's Reset path only enters the server; WPS performs a factory reset.
+If no upload has been started, release Reset and power-cycle normally to leave
+rescue. Any actual upload needs time to complete before touching power.
+
+This is source-backed preparation, **not a verified procedure for the installed
+bootloader**. Do not build/install a replacement bootloader. The stock recovery
+transfer has not been rehearsed. A read-only query returned no `bl_version`
+NVRAM value, so the installed bootloader version has not been established.
 
 Entering rescue mode already interrupts the active router and requires approval.
 A recovery rehearsal, any reset, firmware upload, configuration restoration and
@@ -98,13 +151,15 @@ part of the proposed user procedure.
 
 ## Outstanding readiness work
 
-IPv6 traffic currently bypasses the imported IPv4 VPN kill switches. Real
-daemon validation found that OpenVPN 2.4.12 rejects the imported configuration's
-`data-ciphers` option; updating the daemon is required. Real
-OpenVPN/WireGuard handshakes and lifecycle, router DNS-proxy behavior, complete
-firewall interaction and service ordering remain unverified. General stock VPN
-Fusion/SDN migration, certificate regeneration/export and remaining peer/import
-UI paths, add-on APIs, physical USB, and 3006 source/CI integration are unfinished.
+IPv6 traffic currently bypasses the imported IPv4 VPN kill switches. Dev8 updates
+OpenVPN to 2.6.16 and passes encrypted static/TLS/tls-crypt/tls-crypt-v2 forwarding,
+disconnect blocking, restart and TLS identity-rejection tests. These run under
+QEMU with native networking adapters and synthetic NVRAM, not the router kernel.
+Encrypted WireGuard, router DNS-proxy behavior, complete firewall interaction
+and rc service ordering remain unverified. General stock VPN Fusion/SDN migration,
+certificate regeneration, full exported-profile/HTTP download interoperability,
+remaining peer/import UI paths, add-on APIs, physical USB, and 3006 source/CI
+integration are unfinished.
 The inspected router has no VPN assignments requiring migration today.
 
 After those software issues are addressed and recovery access is confirmed,

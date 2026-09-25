@@ -84,7 +84,7 @@
 +++ b/release/src/router/extendno.conf
 @@ -1 +1 @@
 -EXTENDNO=58138-rtbe90u-dev1
-+EXTENDNO=58138-rtbe90u-dev6-vpn
++EXTENDNO=58138-rtbe90u-dev8-vpn
 --- a/release/src/router/httpd/Makefile
 +++ b/release/src/router/httpd/Makefile
 @@ -240,8 +240,8 @@
@@ -1636,3 +1636,119 @@
  				if (verb > 3)
  					logmessage("openvpn-routing","Setting killswitch rule for %s", src);
  			}
+--- a/release/src/router/Makefile
++++ b/release/src/router/Makefile
+@@ -1629,7 +1629,7 @@
+ obj-$(RTCONFIG_OPENVPN) += lz4
+ obj-$(RTCONFIG_OPENVPN) += openpam
+ obj-$(RTCONFIG_OPENVPN) += easy-rsa
+-obj-$(RTCONFIG_OPENVPN) += openssl openvpn
++obj-$(RTCONFIG_OPENVPN) += openssl libcap-ng openvpn
+ 
+ obj-$(CONFIG_LINUX26) += hotplug2
+ obj-$(CONFIG_LINUX26) += udev
+@@ -7404,13 +7404,31 @@
+ 	mkdir -p $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
+ 	install easy-rsa/2.0/* $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
+ 
++libcap-ng/Makefile:
++	cd libcap-ng && ./autogen.sh && \
++	CFLAGS="-Os -ffunction-sections -fdata-sections $(EXTRACFLAGS)" \
++	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections $(EXTRALDFLAGS)" \
++	$(CONFIGURE) --prefix=/usr --bindir=/usr/sbin --libdir=/usr/lib \
++		--disable-static --without-python --without-python3
++
++libcap-ng: libcap-ng/Makefile
++	$(MAKE) -C $@
++
++libcap-ng-install: libcap-ng
++	install -D libcap-ng/src/.libs/libcap-ng.so.0.0.0 $(INSTALLDIR)/libcap-ng/usr/lib/libcap-ng.so.0.0.0
++	$(STRIP) $(INSTALLDIR)/libcap-ng/usr/lib/libcap-ng.so.0.0.0
++	cd $(INSTALLDIR)/libcap-ng/usr/lib && ln -sf libcap-ng.so.0.0.0 libcap-ng.so.0 && ln -sf libcap-ng.so.0.0.0 libcap-ng.so
++
++libcap-ng-clean:
++	[ ! -f libcap-ng/Makefile ] || $(MAKE) -C libcap-ng distclean
++
+ openvpn/dh2048.pem:
+ 	openssl dhparam -dsaparam -out $@ 2048
+ 
+-openvpn: shared $(if $(BCM_502L07P2),ethctl_lib) openssl lzo$(LZO_VER) openpam zlib openvpn/dh2048.pem openvpn/Makefile
++openvpn: shared $(if $(BCM_502L07P2),ethctl_lib) openssl lzo$(LZO_VER) libcap-ng openpam zlib openvpn/dh2048.pem openvpn/Makefile
+ 	$(MAKE) -j 8 -C $@
+ 
+-openvpn/Makefile:
++openvpn/Makefile: libcap-ng
+ 	( cd openvpn ; ./autogen.sh ; \
+ 		OPENSSL_CFLAGS="-I$(TOP)/openssl/include" \
+ 		OPENSSL_LIBS="-L$(TOP)/openssl/ -lssl -lcrypto" \
+@@ -7420,6 +7438,8 @@
+ 		LZO_LIBS="-L$(TOP)/lzo$(LZO_VER)/src/.libs -llzo2" \
+ 		LZ4_CFLAGS="-I$(TOP)/lz4/lib" \
+ 		LZ4_LIBS="-L$(TOP)/lz4/lib -llz4" \
++		LIBCAPNG_CFLAGS="-I$(TOP)/libcap-ng/src" \
++		LIBCAPNG_LIBS="-L$(TOP)/libcap-ng/src/.libs -lcap-ng" \
+ 		CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -std=gnu99 \
+ 			-DASUSWRT" \
+ 		LDFLAGS="$(EXTRALDFLAGS) -ffunction-sections -fdata-sections \
+@@ -7429,7 +7449,7 @@
+ 		IPROUTE="/usr/sbin/ip" IFCONFIG="/sbin/ifconfig" ROUTE="/sbin/route" \
+ 		$(CONFIGURE) --prefix=/usr --bindir=/usr/sbin --libdir=/usr/lib \
+ 			--disable-debug --enable-management --disable-small \
+-			--disable-selinux --disable-socks --enable-password-save \
++			--disable-selinux --disable-dco --enable-iproute2 \
+ 			--enable-plugin-auth-pam \
+ 			ac_cv_lib_resolv_gethostbyname=no \
+ 	)
+--- a/release/src/router/openvpn/src/openvpn/route.c
++++ b/release/src/router/openvpn/src/openvpn/route.c
+@@ -46,7 +46,7 @@
+ #include "memdbg.h"
+ 
+ #if defined(TARGET_LINUX) || defined(TARGET_ANDROID)
+-typedef  uint64_t __u64;
++#include <linux/types.h>
+ #include <linux/rtnetlink.h>            /* RTM_GETROUTE etc. */
+ #endif
+ 
+--- a/release/src/router/libovpn/openvpn_control.c
++++ b/release/src/router/libovpn/openvpn_control.c
+@@ -309,6 +309,9 @@
+ 
+ 			if (fp_route) {
+ 				while (fgets(buffer2, sizeof(buffer2), fp_route) != NULL) {
++					/* Never retain the WAN default if no tunnel gateway is available. */
++					if (!strncmp(buffer2, "default ", 8))
++						continue;
+ 					if (buffer2[strlen(buffer2)-1] == '\n')
+ 						buffer2[strlen(buffer2)-1] = '\0';
+ 					snprintf(buffer3, sizeof (buffer3), "/usr/sbin/ip route add %s table ovpnc%d", buffer2, unit);
+--- a/release/src/router/libovpn/openvpn_setup.c
++++ b/release/src/router/libovpn/openvpn_setup.c
+@@ -710,8 +710,12 @@
+ 		fprintf(fp, "redirect-gateway def1\n");
+ 	}
+ 
+-	if (cconf->if_type == OVPN_IF_TUN)
++	if (cconf->if_type == OVPN_IF_TUN) {
+ 		fprintf(fp, "route-noexec\n");
++		/* Initialize route_vpn_gateway even if the peer pushes no routes. */
++		if (cconf->redirect_gateway == OVPN_RGW_POLICY)
++			fprintf(fp, "route 0.0.0.0 0.0.0.0 vpn_gateway\n");
++	}
+ 
+ 	if (cconf->auth_mode == OVPN_AUTH_TLS) {
+ 		if (cconf->reneg >= 0)
+--- a/release/src/router/libovpn/openvpn_setup.c
++++ b/release/src/router/libovpn/openvpn_setup.c
+@@ -426,8 +426,9 @@
+ 			fprintf(fp_client, "cipher %s\n", sconf->cipher);
+ 		}
+ 	}
+-	// Fallback to silence logged warning
+-	fprintf(fp, "data-ciphers-fallback AES-128-CBC\n");
++	// TLS fallback must not override the static-key cipher.
++	if (sconf->auth_mode == OVPN_AUTH_TLS)
++		fprintf(fp, "data-ciphers-fallback AES-128-CBC\n");
+ 
+ 	// Digest
+ 	if (strcmp(sconf->digest, "default")) {

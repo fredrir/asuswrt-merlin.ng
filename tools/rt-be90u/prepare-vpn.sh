@@ -28,12 +28,42 @@ bash "$script_dir/prepare-port.sh" "$port_dir" "$stage/source"
 # Read pinned Git objects, independent of the checkout's branch or local edits.
 python3 - "$script_dir/vpn/imports.json" "$merlin_dir" "$stage/source/asuswrt" <<'PY'
 import json
+import io
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tarfile
 
 manifest = json.load(open(sys.argv[1]))
 root = Path(sys.argv[3])
+for name in manifest.get("trees", []):
+    # Replace complete packages so obsolete vendor sources cannot survive.
+    if not name.startswith("release/src/router/") or ".." in Path(name).parts:
+        raise SystemExit("Invalid tree import path: " + name)
+    data = subprocess.check_output([
+        "git", "-C", sys.argv[2], "archive", manifest["revision"], name,
+    ])
+    archive = tarfile.open(fileobj=io.BytesIO(data))
+    members = archive.getmembers()
+    for member in members:
+        if member.isdir():
+            continue
+        if (not member.isfile() or not member.name.startswith(name + "/")
+                or ".." in Path(member.name).parts):
+            raise SystemExit("Invalid tree member: " + member.name)
+    target = root / name
+    if target.is_symlink():
+        raise SystemExit("Unexpected package symlink: " + name)
+    if target.exists():
+        shutil.rmtree(target)
+    for member in members:
+        if member.isfile():
+            path = root / member.name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(archive.extractfile(member).read())
+            path.chmod(member.mode & 0o777)
+    archive.close()
 for destination, source in manifest["files"].items():
     for name in (destination, source):
         if not name.startswith("release/src/router/") or ".." in Path(name).parts:
@@ -50,15 +80,19 @@ patch --directory="$stage/source/asuswrt" -p1 --fuzz=0 --batch --forward \
 printf '%s\n' "$revision" > "$stage/source/merlin-source.rev"
 (cd "$script_dir/vpn" && sha256sum imports.json source-files.json 0001-vpn-integration.patch) \
 	>> "$stage/source/port-patches.sha256"
-python3 - "$script_dir/vpn/source-files.json" "$stage/source" <<'PY'
+python3 - "$script_dir/vpn/source-files.json" "$stage/source" "$script_dir/vpn/imports.json" <<'PY'
 import hashlib
 import json
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[2])
+names = set(json.load(open(sys.argv[1])))
+for tree in json.load(open(sys.argv[3])).get("trees", []):
+    names.update(str(path.relative_to(root / "asuswrt"))
+                 for path in (root / "asuswrt" / tree).rglob("*") if path.is_file())
 with (root / "vpn-source-files.sha256").open("w") as output:
-    for name in json.load(open(sys.argv[1])):
+    for name in sorted(names):
         digest = hashlib.sha256((root / "asuswrt" / name).read_bytes()).hexdigest()
         output.write(digest + "  " + name + "\n")
 PY
