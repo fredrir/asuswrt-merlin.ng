@@ -492,8 +492,13 @@ written by ARM libovpn, and two isolated network namespaces. It tests `static`,
 `tls`, `tls-crypt`, and `tls-crypt-v2` modes. The v2 peer uses a custom server
 directive to emulate a provider; the server UI's own control-channel option is v1.
 The library's server export embeds stored certificates/keys and is parsed by the
-daemon. That parser check alone does not establish every exported profile's
-interoperability or the HTTP download endpoint.
+daemon. An additional phase connects the exported static-key, TLS and tls-crypt
+profiles to the actual ARM server and verifies encrypted forwarding. Connection
+and cryptographic options remain unchanged; the fixture names the TUN interface
+and supplies native address/route setup. This checks exported key material with
+OpenVPN 2.6.16; desktop route/DNS integration, other clients and the HTTP download
+endpoint remain untested. Custom tls-crypt-v2 provider exports are outside the
+server UI's supported export modes.
 
 Packets enter at the synthetic LAN, traverse the encrypted tunnel and arrive at
 the peer. The transport capture checks that the plaintext marker is absent.
@@ -536,3 +541,8 @@ The packaged `libovpn.so` SHA-256 is
 OpenVPN's is `a70908279b35b2c5447c9ed734c8877d645779e1b2b4d7cab7464d5b956078ad`.
 The previous dev7 static-cipher failure and missing-gateway escape remain recorded
 in `logs/vpn-dev7-tunnel-static.log` and `logs/vpn-dev7-gateway-regression.log`.
+
+Exported-profile evidence: `logs/vpn-dev8-export-static.log`,
+`logs/vpn-dev8-export-tls.log`, and `logs/vpn-dev8-export-tls-crypt.log`.
+The original generated-config lifecycle tests also pass in those runs; explicit
+fixture routes are introduced only in the separate exported-profile phase.

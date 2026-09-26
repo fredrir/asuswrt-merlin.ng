@@ -149,6 +149,31 @@ A recovery rehearsal, any reset, firmware upload, configuration restoration and
 reboot must be explicitly scoped before execution. No raw `mtd-write` command is
 part of the proposed user procedure.
 
+## Proposed probe-only rehearsal
+
+This is the next hardware step for approval, separate from installing dev8:
+
+1. Reserve a short outage and keep another Internet connection available for
+   coordination. Save the current ASUS settings backup privately. Keep the
+   verified stock image locally available.
+2. Use a direct Ethernet link from the recovery computer, isolate other router
+   links, record that computer's current network settings, and temporarily use
+   `192.168.50.75/24` on its Ethernet interface without a gateway.
+3. With approval and physical access, power off the router, hold **Reset** while
+   powering it on, and release Reset once rescue behavior appears. Do not use
+   WPS. Record LED behavior; do not treat an assumed LED pattern as confirmation.
+4. Run only the ordinary TFTP read probe above. A zero-byte successful reply is
+   the expected result. If it fails, stop and inspect the recorded observations.
+   Do not upload firmware, reset settings, or try changing bootloader variables.
+5. With no upload attempted, power-cycle normally to return to stock firmware,
+   restore computer settings and cables, and verify normal connectivity and the
+   stock firmware/model identity.
+
+Entering and leaving rescue causes downtime. This rehearsal verifies access to
+the service only; it cannot prove that firmware validation or flashing works.
+Firmware installation, USB formatting and configuration restoration are separate
+future actions. No step in this rehearsal has been performed on hardware.
+
 ## Outstanding readiness work
 
 IPv6 traffic currently bypasses the imported IPv4 VPN kill switches. Dev8 updates
@@ -157,7 +182,7 @@ disconnect blocking, restart and TLS identity-rejection tests. These run under
 QEMU with native networking adapters and synthetic NVRAM, not the router kernel.
 Encrypted WireGuard, router DNS-proxy behavior, complete firewall interaction
 and rc service ordering remain unverified. General stock VPN Fusion/SDN migration,
-certificate regeneration, full exported-profile/HTTP download interoperability,
+certificate regeneration, desktop exported-profile integration/HTTP download,
 remaining peer/import UI paths, add-on APIs, physical USB, and 3006 source/CI
 integration are unfinished.
 The inspected router has no VPN assignments requiring migration today.

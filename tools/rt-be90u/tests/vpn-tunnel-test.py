@@ -146,6 +146,51 @@ def generate_config(root, mode):
             script.chmod(0o755)
 
 
+def exported_tunnel(root, mode, peer, processes, logs):
+    # tls-crypt-v2 is a custom provider fixture, not a server UI export mode.
+    if mode == 'tls-crypt-v2':
+        return
+    directory = root / 'tmp/export'
+    directory.mkdir()
+    exported = (root / 'etc/openvpn/server1/client.ovpn').read_text()
+    assert 'remote 10.250.0.2 1194\n' in exported, exported
+    assert 'dev tun\n' in exported
+    # Keep all connection/crypto options and inline keys from the actual export.
+    # Only name the fixture interface and bridge the emulator's network boundary.
+    config = exported.replace('dev tun\n', 'dev tun11\n')
+    config += ('\nverb 3\nifconfig-noexec\nroute-noexec\nscript-security 2\n'
+               'up /tmp/export/up\n')
+    (directory / 'client.ovpn').write_text(config)
+    number = 1 if mode == 'static' else 2
+    script = directory / 'up'
+    script.write_text('#!/bin/sh\nset -eu\n'
+                      '/usr/sbin/ip addr replace 10.9.0.%d/24 dev "$dev"\n' % number
+                      + '/usr/sbin/ip link set "$dev" up\n'
+                        ': > /tmp/export/ready\n')
+    script.chmod(0o755)
+    logfile = root / 'tmp/exported-client.log'
+    logs.append(logfile)
+    with logfile.open('w') as output:
+        process = subprocess.Popen(['chroot', str(root), '/qemu', '/usr/sbin/openvpn',
+            '--cd', '/tmp/export', '--config', 'client.ovpn'], stdout=output, stderr=subprocess.STDOUT)
+    processes.append(process)
+    await_interface('tun11')
+    for attempt in range(100):
+        if (directory / 'ready').exists():
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError('Exported client did not complete its interface setup')
+    # Route fixture traffic explicitly; this test verifies exported connection
+    # and key material, not the desktop client's route/DNS integration.
+    ip('route', 'replace', 'default', 'dev', 'tun11', 'table', 'ovpnc1')
+    ip('rule', 'add', 'pref', '1', 'from', '192.0.2.10', 'to', '203.0.113.99',
+       'iif', 'br0', 'table', 'ovpnc1')
+    transfer(peer, b'RTBE90U-EXPORTED-PROFILE')
+    print('PASS actual server-exported ' + mode + ' profile establishes encrypted forwarding', flush=True)
+    stop(process)
+
+
 def main(root, mode):
     network.prepare(root)
     network.setup_links()
@@ -242,11 +287,13 @@ def main(root, mode):
             stop(rejected)
             config.write_text(original)
             print('PASS TLS rejects the wrong server identity while the kill switch remains effective', flush=True)
-        launch('router')
+        client = launch('router')
         transfer(peer, b'RTBE90U-ENCRYPTED-RESTART')
         print('PASS actual OpenVPN restart restores encrypted forwarding', flush=True)
         for sock in fixture.sockets.values():
             sock.close()
+        stop(client)
+        exported_tunnel(root, mode, peer, processes, logs)
     finally:
         for process in reversed(processes):
             stop(process)
