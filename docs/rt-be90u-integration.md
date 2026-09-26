@@ -128,7 +128,8 @@ are not promised: vendor packaging includes timestamps and generated metadata.
 
 `.github/workflows/rt-be90u.yml` runs separately from the release workflow. It
 checks relevant changes on `master-3006`, `DEV_*` branches and pull requests
-targeting `master-3006`; manual dispatch is also available. The default Actions
+targeting `master-3006`. Manual dispatch is declared for use once the workflow
+is on the repository's default branch. The default Actions
 checkout selects the event commit (the merge commit for pull requests), uses a
 sparse checkout of the required source trees and does not retain credentials.
 
@@ -194,9 +195,9 @@ up; it does not route IPv6 through VPNs or protect IPv6 identities selected
 only by IPv4 device rules.
 
 Next integration work includes maintainer agreement on source ownership,
-consolidation of common-code overrides, other-model build checks, reproducible
-builder provisioning, CI/artifact/release wiring, and completion of runtime
-service/migration/add-on support. Recovery rehearsal and controlled hardware
+consolidation of common-code overrides, expanded automated runtime coverage,
+release integration, and completion of runtime service/migration/add-on support.
+Recovery rehearsal and controlled hardware
 validation remain separate prerequisites for a support PR.
 
 ## Dev15 result
@@ -257,3 +258,30 @@ SquashFS begins at byte 4,322,736. See the
 [dev16 validation summary](rt-be90u-dev16-validation.json) for exact source,
 fixture and check identities. Browser validation remains at dev12; hardware and
 full firmware service orchestration still require validation.
+
+The subsequent [GT-BE98 default and ROG compatibility builds](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36252624626)
+both passed on `cb0c3d00acaacbd9f6116c2bd02f3165a75f82a7`. The native CI
+tooling commits retain the same firmware sources, so this validates compilation
+of the shared dev16 changes for the existing 3006 model as well.
+
+## Clean CI result
+
+The [RT-BE90U experimental workflow](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36254108733)
+passed on `d82460889c4859c3bc0d7d6c75908033d6adc55d`, including fresh dependency
+installation, firmware compilation, all checks described above and artifact
+upload. The downloaded firmware's SHA-256 and image structure were independently
+verified. All 150,610 hosted input records exactly match preserved dev16.
+The CI image is 59,048,789 bytes; SHA-256:
+`31c9cbf1d8a70af31e62ec8644029e67ebf8395cf23d452080256185fe12b941`.
+
+An independent fresh local checkout and newly provisioned builder also completed
+the build, image/linkage checks and script/config/event fixture. Its image is a
+separate rebuild with different timestamps; the completed original dev16 image
+and sources remain preserved. See the [CI validation summary](rt-be90u-ci-validation.json)
+for exact commits, image identities, checks and remaining limits.
+
+The first hosted run exposed an exporter issue specific to sparse toolchain
+checkouts: archiving the commit with a path filter requested an unrelated absent
+blob. Provisioning now archives only the pinned package subtree. This passed
+with that unrelated blob still absent; all 3,714 entries match the prior export
+in names, types, executable modes, symlink targets and file contents.
