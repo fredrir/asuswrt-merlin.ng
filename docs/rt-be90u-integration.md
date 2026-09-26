@@ -136,9 +136,10 @@ sparse checkout of the required source trees and does not retain credentials.
 The job provisions Ubuntu build packages from scratch, checks out the pinned
 QCA toolchain revision and builds with Docker networking disabled. It rejects
 an existing build directory or collected image, and uses no source/build cache.
-It runs helper tests, 2,144 common-source comparisons, 32 invalid-profile rejections, native input checks,
-uImage identity/CRC/size checks, extracted rc/httpd/OpenVPN linkage checks and
-the source-compiled script/config/event fixture. The full QEMU VPN, browser,
+It runs helper tests, 2,144 common-source comparisons, 32 invalid-profile
+rejections, native input checks, uImage identity/CRC/size checks, extracted
+rc/httpd/OpenVPN linkage checks and the source-compiled script/config/event
+fixture. The full QEMU VPN, browser,
 Entware and hardware suites remain separate from this initial CI job.
 
 The common-source checker normally requires local baseline objects. In shallow
@@ -302,3 +303,40 @@ is part of the offline basic suite for dev17. It does not exercise complete rc
 service orchestration. The broader offline suite checks WireGuard import/export,
 keepalive and encrypted tunnels, four OpenVPN tunnel modes, policy routing and
 IPv6 blocking. These runtime suites remain separate from hosted build CI.
+
+The local dev17 build passed all 11 selected VPN suites, the script/config/event
+fixture, packaged linkage and content checks. Independent source assembly and
+Git-index verification cover all 150,610 inputs. Both rc objects were recompiled
+and are byte-identical to dev16, as is the kernel configuration.
+
+The local image is 59,049,809 bytes; SHA-256:
+`7574fbaa257e85dd14d0b864976b757596855798f6475694ba93594aaf4a602a`.
+SquashFS begins at byte 4,322,736. See the
+[dev17 validation summary](rt-be90u-dev17-validation.json) for exact identities
+and scope. Unlike dev16's 11-suite run, this run includes the new wrapper fixture
+and omits the unchanged stock image validator. Entware remains at dev16 and
+browser testing at dev12; neither was rerun for this consolidation.
+
+A follow-up service audit found that `clearovpnclient` / `clearovpnserver` are
+inside the inactive `RTCONFIG_YANDEXDNS` branch of the services overlay. Their
+action strings are absent from the compiled services object, although the
+OpenVPN UI pages call those reset actions. This predates dev17 and is outside
+the wrapper/tunnel fixtures. Correcting the dispatch and adding service-level
+regression coverage is required in the next candidate. The WireGuard client UI
+also calls `clearwgclient`, whose dispatcher is missing from the services
+overlay and compiled object.
+
+The [clean dev17 hosted build](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36262918390)
+passed on `3d17d4047ea047725225afc00fb587e8fbe90781`, including fresh provisioning,
+compilation, image/linkage checks and the script/config/event fixture. The
+downloaded firmware checksum was verified, and all 150,610 hosted input records
+match local dev17. This separate rebuild is 59,049,349 bytes, SHA-256
+`1d34eb0c06444d89df2766abd6773c0167a140ad7fc1258253ddba4824d5f352`.
+The SDK's ignored Ookla source-copy error remains; its packaged tracked prebuilt
+is byte-identical to dev16. Speedtest runtime behavior was not tested.
+
+Both [GT-BE98 default and ROG compatibility builds](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36262918415)
+also passed on `3d17d4047ea047725225afc00fb587e8fbe90781`, including artifact
+upload. Release and manifest publishing were skipped. This verifies compilation
+of the shared changes for both existing-model variants; it is not GT-BE98
+hardware or runtime validation.
