@@ -78,8 +78,9 @@ An optional third argument selects an existing compatible Ubuntu 20.04 builder
 as the dependency image. The local validation used the cached
 `rt-be90u-build:58138` image, ID
 `sha256:74cad8c3c730d9bd59d2618f9b3d70eb315ae7b25f089e5d8a812e0530575461`,
-to create `rt-be90u-build:3006` offline. Reprovisioning all OS packages from
-scratch was not validated offline: the Ubuntu apt layer was unavailable.
+to create `rt-be90u-build:3006` offline. Fresh OS-package provisioning has since
+passed using `Dockerfile.deps` with `--pull --no-cache`; the experimental CI job
+also provisions these dependencies on every run.
 
 From the repository root:
 
@@ -122,6 +123,38 @@ This removes the private build tree and retains collected versioned images.
 Preserve a completed candidate and choose a new development version before
 making further firmware changes. Identical firmware bytes across rebuilds
 are not promised: vendor packaging includes timestamps and generated metadata.
+
+### Experimental CI
+
+`.github/workflows/rt-be90u.yml` runs separately from the release workflow. It
+checks relevant changes on `master-3006`, `DEV_*` branches and pull requests
+targeting `master-3006`; manual dispatch is also available. The default Actions
+checkout selects the event commit (the merge commit for pull requests), uses a
+sparse checkout of the required source trees and does not retain credentials.
+
+The job provisions Ubuntu build packages from scratch, checks out the pinned
+QCA toolchain revision and builds with Docker networking disabled. It rejects
+an existing build directory or collected image, and uses no source/build cache.
+It runs helper tests, 1,152 common-source comparisons, native input checks,
+uImage identity/CRC/size checks, extracted rc/httpd/OpenVPN linkage checks and
+the source-compiled script/config/event fixture. The full QEMU VPN, browser,
+Entware and hardware suites remain separate from this initial CI job.
+
+The common-source checker normally requires local baseline objects. In shallow
+CI clones, `--fetch-baselines` explicitly fetches the two recorded commits and
+their eighteen relevant blobs before running the comparisons without lazy
+fetching. This is test provisioning; the firmware build still consumes only
+checked-out inputs.
+
+Each run uploads logs and validation reports, including failures, for 14 days.
+Firmware is included only after all image/linkage/script checks pass, together
+with SHA-256 checksums and an experimental-use notice. The artifact name
+contains the event commit and run attempt; `source-commit.txt` records the
+actual checked-out commit. Build-input hashes, toolchain revision, Docker image
+identities and installed host-package versions are saved alongside the logs.
+This job does not publish releases or update manifests. It tests clean build
+reproducibility, not byte-identical output: Ubuntu packages and build timestamps
+are not frozen, and the firmware retains its development version label.
 
 ## Validation and remaining integration work
 

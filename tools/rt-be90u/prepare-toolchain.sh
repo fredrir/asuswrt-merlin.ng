@@ -21,6 +21,8 @@ git -C "$toolchain_dir" diff --quiet HEAD -- "$package"
 test -z "$(git -C "$toolchain_dir" ls-files --others --exclude-standard -- "$package")"
 context_dir=$(mktemp -d)
 trap 'rm -rf -- "$context_dir"' EXIT
-git -C "$toolchain_dir" archive "$revision" "$package" | tar -x -C "$context_dir"
+# Archive the subtree itself: some Git versions preload unrelated blobs when
+# archiving a whole commit with a path filter, breaking sparse/partial clones.
+git -C "$toolchain_dir" archive --prefix="$package/" "$revision:$package" | tar -x -C "$context_dir"
 cp "$script_dir/Dockerfile" "$context_dir/Dockerfile"
 docker build --network=none --build-arg "BUILD_DEPS_IMAGE=$deps_image" -t "$image_tag" "$context_dir"
