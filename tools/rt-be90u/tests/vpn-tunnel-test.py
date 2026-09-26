@@ -111,6 +111,7 @@ def generate_config(root, mode):
     for name in ('config', 'event'):
         run('/opt/openwrt-gcc750_musl1124.aarch64/bin/aarch64-openwrt-linux-musl-gcc',
             '-Wall', '-Wextra', '-Werror', '-Wl,-E', '-I/work/release/src/router/libovpn',
+            '-I/work/release/src/router/shared',
             '/tests/vpn-daemon-' + name + '.c', '-L/firmware/usr/lib',
             '-Wl,-rpath-link,/firmware/usr/lib:/firmware/lib', '-lovpn',
             '-o', str(root / ('harness/' + name)))

@@ -3,8 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <rtconfig.h>
 #include <openvpn_config.h>
 #include <openvpn_setup.h>
+
+#if !defined(RTCONFIG_SOC_IPQ53XX) || !defined(RTCONFIG_VPN_FUSION_MERLIN)
+#error "Tunnel fixtures require the matching RT-BE90U build configuration"
+#endif
+_Static_assert(sizeof(((ovpn_cconf_t *)0)->password) == 256,
+               "Tunnel fixture must use the IPQ53xx client configuration ABI");
 
 char *nvram_get(const char *name) { return getenv(name); }
 int nvram_set(const char *name, const char *value) { return setenv(name, value, 1); }
