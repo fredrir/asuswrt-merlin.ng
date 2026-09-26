@@ -3,7 +3,8 @@
 
 This checks selected C tokens across feature profiles, with includes removed.
 It does not type-check headers or replace a complete other-model firmware build.
-All referenced Git objects must already be available; no lazy fetch is allowed.
+Checks run without lazy fetching. --fetch-baselines explicitly provisions the
+two baseline commits and the eighteen source blobs first, for shallow CI clones.
 """
 import argparse
 import hashlib
@@ -32,10 +33,10 @@ PLATFORMS = {
 TOKEN = re.compile(r'''(?:u8|[LuU])?"(?:\\.|[^"\\])*"|(?:[LuU])?'(?:\\.|[^'\\])*'|[A-Za-z_]\w*|\d+(?:\.\d*)?|>>=|<<=|\.\.\.|\+\+|--|->|&&|\|\||<=|>=|==|!=|\+=|-=|\*=|/=|%=|&=|\|=|\^=|<<|>>|\S''')
 
 
-def git_source(repo, revision, name):
+def git_source(repo, revision, name, fetch=False):
     return subprocess.check_output(
         ['git', 'show', revision + ':' + name], cwd=repo,
-        env=dict(os.environ, GIT_NO_LAZY_FETCH='1'), text=True)
+        env=dict(os.environ, GIT_NO_LAZY_FETCH='0' if fetch else '1'), text=True)
 
 
 def tokens(source, definitions, compiler):
@@ -51,8 +52,19 @@ def main():
     parser.add_argument('--base', default='920b77f5f92db14717a27abd5c8e1b06ae6c8ec1')
     parser.add_argument('--qca-base', default='2db9b885dec71cb4971b54edf7ad31d00063d842')
     parser.add_argument('--compiler', default='cc')
+    parser.add_argument('--fetch-baselines', action='store_true',
+                        help='Fetch pinned baseline objects from origin before offline comparisons')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
+    if args.fetch_baselines:
+        for revision, prefix in ((args.base, ''),
+                                 (args.qca_base, 'release/src-qca-ipq53xx/source-overlay/')):
+            if not re.fullmatch(r'[0-9a-f]{40}', revision):
+                parser.error('--fetch-baselines requires full commit IDs')
+            subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', '--filter=blob:none',
+                            'origin', revision], cwd=repo, check=True)
+            for name in FILES:
+                git_source(repo, revision, prefix + name, fetch=True)
     results = []
     for name in FILES:
         upstream = git_source(repo, args.base, name)
