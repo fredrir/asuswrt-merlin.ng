@@ -15,7 +15,7 @@ validation have not been performed; the image is not ready to flash.
 | Location | Build role and provenance |
 | --- | --- |
 | `release/src/` | 68,199 existing files reused directly, with no changes to the upstream common tree |
-| `release/src-qca-ipq53xx/linux`, `qca`, and other platform directories | 68,029 vendor platform inputs from ASUS GPL TUF-BE9400 3.0.0.6.102.58138 |
+| `release/src-qca-ipq53xx/linux`, `ipq53xx`, and other platform directories | 68,029 vendor platform inputs from ASUS GPL TUF-BE9400 3.0.0.6.102.58138 |
 | `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,923 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
 | `release/src-qca-ipq53xx/vendor/` | SDK build glue and auxiliary sources needed to reconstruct the SDK layout |
 | `release/src-qca-ipq53xx/sources.json` | Explicit common/override/platform file lists, SDK aliases, required empty directories and import provenance |
@@ -133,6 +133,24 @@ path traversal and source timestamp ordering:
 python3 -m unittest discover -s tools/rt-be90u/tests -p 'test_*.py'
 ```
 
+Once the image is extracted, the existing runtime fixtures can be run with:
+
+```sh
+python3 tools/rt-be90u/validate-image.py /path/to/extracted/rootfs \
+  --logs /path/to/new-validation-directory
+```
+
+This requires the locally provisioned images described by
+`tools/rt-be90u/tests/Dockerfile` and `Dockerfile.network`, and `/dev/net/tun`
+for encrypted tunnel tests. The runner never pulls an image. It mounts firmware,
+matching build sources and fixtures read-only, disables external networking,
+and records the commands and exit statuses. Network tests receive capabilities
+inside their disposable containers. Use `--source` to select a preserved build
+source, `--group` to run one suite, and `--official-rootfs` plus `--candidate`
+to include the stock userspace image validator. Its acceptance does not prove
+that the bootloader will accept the image. In this fixture it also accepts
+a synthetic wrong-model header, so it does not establish model enforcement.
+
 Offline ARM fixtures execute packaged programs under QEMU and use the host
 kernel in isolated Docker networking. They do not reproduce the router kernel,
 rc boot orchestration, Wi-Fi, hardware acceleration or persistent NVRAM. The
@@ -145,3 +163,20 @@ consolidation of common-code overrides, other-model build checks, reproducible
 builder provisioning, CI/artifact/release wiring, and completion of runtime
 service/migration/add-on support. Recovery rehearsal and controlled hardware
 validation remain separate prerequisites for a support PR.
+
+## Dev15 result
+
+The first native candidate completed a clean build (using the SDK's required
+prebuilt components) and all 11 runtime suites above. The 25 helper tests,
+image structure/CRC checks and rc/httpd/OpenVPN linkage checks passed. The image
+contains 792 AArch64 ELFs and 11 unchanged vendor coprocessor ELFs, with no test
+fixtures packaged. The kernel configuration and packaged ECM selector match
+dev14. Independent preparation and a post-build Git-input audit both passed.
+
+The versioned image is 59,049,669 bytes; SHA-256:
+`30fd584fa05e77ee2c9245372ca0a2ddd3a5845121c8681612d7123b771141b5`.
+SquashFS begins at byte 4,322,736. The exact
+[validation summary](rt-be90u-dev15-validation.json) records source identity,
+suites and limits. Browser and Entware baselines remain dev12 and dev11; those
+suites were not rerun for this source-layout change. Other-model sources were
+checked for changes, but their firmware builds were not run.
