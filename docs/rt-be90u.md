@@ -248,9 +248,9 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Status | Build and offline testing only; not ready to flash |
 | Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
 | Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
-| Version | `58138-rtbe90u-dev12-vpn` |
-| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev12-vpn.trx`; 59,047,749 bytes |
-| SHA-256 | `a13d3795b762e525fa3553df599560001d0ac65f200c52617c1e2c218f482bff` |
+| Version | `58138-rtbe90u-dev13-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev13-vpn.trx`; 59,047,165 bytes |
+| SHA-256 | `a1834473eef78c39380275059fc6741beaab56f3524c29edf2d074e0aa7d22bb` |
 | Superseded build | `dev2-vpn` omitted `RTCONFIG_VPN_FUSION_MERLIN` because the SDK selected a different target file; its library tests did not establish the routing build configuration |
 | Configuration guard | Both target files enable Merlin VPN integration; compilation and ARM tests reject configurations without that switch |
 | Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
@@ -262,17 +262,17 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
 | ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
 | Source integrity | All 599 pre-build inputs match independent fresh preparation; 594 remain identical after compilation, with five expected Autotools-generated Makefiles separately accounted for |
-| Build | Incremental build in a separate copy of completed dev11; version, shared importer and WireGuard config writer changed; `make` exit 0; independent fresh preparation in `experimental-vpn-dev12-final-repro-58138` |
+| Build | Incremental build in a separate copy of completed dev12; version, shared importer and WireGuard server exporter changed; `make` exit 0; independent fresh preparation in `experimental-vpn-dev13-final-repro-58138` |
 | Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector in the new packaged `rc` was disassembled again and still returns disabled |
 | Regression checks | ARM test rejects `dev2-vpn`; browser tests reproduce `dev3-vpn` UI/save failures and `dev4-vpn` extra-certificate loss |
 | Browser fixes | Import VPN Director icons and retain them during packaging; add Merlin name validation; process generic VPN settings after their profile selectors |
 | Certificate fixes | Save extra certificates and submitted generic-key values; read and accept up to 7,999 bytes; reject oversized indexed and generic submissions |
-| Browser result | Six pages/tabs, VPN Director CRUD, OpenVPN settings, certificates, long chains, profile import/isolation and WireGuard settings pass against the extracted final image |
+| Browser result | Six pages/tabs, VPN Director CRUD, OpenVPN settings, certificates, long chains, profile import/isolation and WireGuard settings pass; last browser run used the extracted dev12 image |
 | Artifact checks | Both CRCs valid; fits observed UBI volume; `rc`, HTTP and OpenVPN linkage passes; 792 runtime ELFs are AArch64; 11 coprocessor ELFs unchanged; SquashFS offset 4323076 |
-| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev12-58138` and `image-audit-vpn-dev12` on `archie`; results in `logs/vpn-dev12-*` |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev13-58138` and `image-audit-vpn-dev13` on `archie`; results in `logs/vpn-dev13-*` |
 | Current-router migration | Read-only inspection found no Fusion profiles, device policies, default VPN or SDN VPN assignments; no VPN assignments need conversion on this router |
 | Encrypted OpenVPN | Generated static/TLS/tls-crypt/tls-crypt-v2 configurations, LAN forwarding, transport ciphertext, disconnect blocking, restart and wrong-server rejection pass |
-| Encrypted WireGuard | Image ARM keys/import/routing and exact source config writers with native host-kernel tunnels; forwarding, outage, kill switch, wrong PSK and restart pass; router kernel/full rc pending |
+| Encrypted WireGuard | Image ARM keys/import/routing and exact source config writers with native host-kernel tunnels; forwarding, outage, kill switch, wrong PSK, restart and server-exported connections pass; router kernel/full rc pending |
 | Remaining work | Full router service lifecycle; IPv6 policy protection; general stock VPN Fusion/SDN migration; add-on APIs; remaining UI paths; recovery and hardware validation |
 
 Dev12 reruns the image/source/linkage audits, ARM configuration/import checks,
@@ -281,6 +281,11 @@ tunnel suite. Earlier dev11 OpenVPN/Entware results below remain their recorded
 baseline; those suites were not repeated for this WG-only change. The OpenVPN
 and libovpn binaries are unchanged. The official validator still does not prove
 model enforcement or bootloader acceptance.
+
+Dev13 reruns image/source/linkage audits, ARM configuration/import checks, the
+official userspace image validator and expanded WG export/tunnel tests. Browser
+and packet-policy coverage remains the dev12 baseline. HTTP, OpenVPN and libovpn
+binaries are unchanged; rc and libshared changed for the WG fixes.
 
 The supplied Merlin checkout must contain commit `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`.
 
@@ -676,3 +681,34 @@ docker run --rm --network none --read-only --ulimit core=0 \
   --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
   rt-be90u-network-test:58138 sh /tests/run-wg-tunnel-test.sh
 ```
+
+
+## WireGuard server export defaults
+
+Dev13 also fixes two failures reproduced against dev12 in
+`logs/vpn-dev12-wg-export-regression.log`. With an empty peer route list, the
+source exporter wrote `AllowedIPs = /32` for a bare server IP and produced no
+profile for CIDR or dual-stack server addresses. It now exports a /32 or /128
+host route to each server address. Explicit peer route lists are preserved.
+
+An exported profile with server keepalive set to zero correctly omits
+PersistentKeepalive. Native WireGuard applies that as disabled, but the importer
+previously replaced the missing value with the router's 25-second UI default.
+Dev13 imports an omitted keepalive as zero. Explicit values are retained, and
+an unset router NVRAM value still uses the existing 25-second writer default.
+This supersedes the omitted-import behavior tested in dev12 above.
+
+`tests/run-wg-export-test.sh` checks the exact source exporter, actual image ARM
+importer and native applied WG settings for explicit routes, omitted keepalive,
+bare server addresses, CIDR addresses and dual-stack addresses. It uses the same
+container mounts/capabilities as the WG tunnel test; SYS_ADMIN is unnecessary.
+The extended tunnel test also connects using the source-generated server export.
+Only Address/DNS directives, which belong to wg-quick, are removed before native
+setconf; the fixture supplies addressing/routing. This does not test desktop
+wg-quick DNS integration or packaged rc startup.
+
+All five export cases and the expanded encrypted tunnel suite pass on dev13.
+Evidence: `logs/vpn-dev13-wg-export.log`, `logs/vpn-dev13-wg-tunnel.log`,
+`logs/vpn-dev13-wg-import.log` and `logs/vpn-dev13-config.log`. Source, image,
+linkage and official userspace-validator evidence is in the other
+`logs/vpn-dev13-*` files. The IPv6 policy and hardware limitations above remain.

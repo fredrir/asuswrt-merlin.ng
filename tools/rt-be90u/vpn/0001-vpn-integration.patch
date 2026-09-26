@@ -84,7 +84,7 @@
 +++ b/release/src/router/extendno.conf
 @@ -1 +1 @@
 -EXTENDNO=58138-rtbe90u-dev1
-+EXTENDNO=58138-rtbe90u-dev12-vpn
++EXTENDNO=58138-rtbe90u-dev13-vpn
 --- a/release/src/router/httpd/Makefile
 +++ b/release/src/router/httpd/Makefile
 @@ -240,8 +240,8 @@
@@ -2126,3 +2126,44 @@
  
  		fclose(fp);
  
+--- a/release/src/router/shared/vpn_utils.c
++++ b/release/src/router/shared/vpn_utils.c
+@@ -456,6 +456,8 @@
+ 	/* No parser error above this point has modified any profile settings. */
+ 	snprintf(prefix, sizeof(prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, wgc_unit);
+ 	nvram_pf_restore_default("wgc_", prefix);
++	/* An omitted wg keepalive means disabled, independent of the UI default. */
++	if (!alive[0]) nvram_pf_set(prefix, "alive", "0");
+ 	for (i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
+ 		if (fields[i].seen && fields[i].nvname)
+ 			nvram_pf_set(prefix, fields[i].nvname, fields[i].value);
+--- a/release/src/router/rc/wireguard.c
++++ b/release/src/router/rc/wireguard.c
+@@ -1081,11 +1081,23 @@
+ 
+ 	if (caips[0] == '\0')
+ 	{
+-		int ret = is_valid_ip(buf);
+-		if (ret > 0)
++		char addr[64] = {0};
++		char *next = NULL, *mask;
++		int ret;
++
++		/* With no peer routes, export host routes to the server addresses. */
++		foreach_44(addr, buf, next)
++		{
++			if ((mask = strchr(addr, '/')) != NULL)
++				*mask = '\0';
++			ret = is_valid_ip(addr);
++			if (ret <= 0)
++				return;
++			if (caips[0]) strlcat(caips, ",", sizeof(caips));
++			strlcat(caips, addr, sizeof(caips));
+ 			strlcat(caips, (ret > 1) ? "/128" : "/32", sizeof(caips));
+-		else
+-			return;
++		}
++		if (!caips[0]) return;
+ 	}
+ 
+ 	fp = fopen(c_path, "w");

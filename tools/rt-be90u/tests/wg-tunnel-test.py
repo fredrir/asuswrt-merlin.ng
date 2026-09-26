@@ -33,8 +33,9 @@ def compile_config(root):
         print(name + ' SHA-256:', hashlib.sha256(data.encode()).hexdigest(), flush=True)
     functions = [re.search(r'^#define WG_KEY_SIZE.*$', source, re.M)[0],
                  re.search(r'^char \*trim_r\(.*?\n}\n', common, re.M | re.S)[0]]
-    for name in ('_wg_resolv_ep', '_wg_client_gen_conf', '_wg_server_gen_conf'):
-        functions.append(re.search(r'^static (?:int|void) ' + name + r'\(.*?\n}\n',
+    for name in ('_wg_resolv_ep', '_wg_client_gen_conf', '_wg_server_gen_conf',
+                 '_wg_server_get_endpoint', '_wg_server_gen_client_conf'):
+        functions.append(re.search(r'^static [^\n]+?\b' + name + r'\(.*?\n}\n',
                                    source, re.M | re.S)[0])
     (root / 'harness/wg-config-source.inc').write_text('\n'.join(functions))
     run('/opt/openwrt-gcc750_musl1124.aarch64/bin/aarch64-openwrt-linux-musl-gcc',
@@ -63,14 +64,17 @@ def configurations(root, wg, regressions):
     keys['psk'] = arm(root, '/usr/sbin/wg', 'genpsk')
     print('PASS actual ARM WG key generation matches native public-key derivation', flush=True)
 
-    def client(endpoint, alive):
+    def client(endpoint, alive, unset=False):
         config = ('[Interface]\nPrivateKey = ' + keys['client'] + '\nAddress = 10.9.0.2/24\n'
                   '[Peer]\nPublicKey = ' + keys['server_pub'] + '\nPresharedKey = ' + keys['psk']
                   + '\nAllowedIPs = 0.0.0.0/0,::/0\nEndpoint = ' + endpoint + '\n')
         if alive is not None:
             config += 'PersistentKeepalive = ' + alive + '\n'
         (root / 'tmp/provider.conf').write_text(config)
-        arm(root, '/harness/wg-config', 'client', env=dict(os.environ, ipv6_service='dhcp6'))
+        env = dict(os.environ, ipv6_service='dhcp6')
+        if unset:
+            env['FIXTURE_UNSET_KEEPALIVE'] = '1'
+        arm(root, '/harness/wg-config', 'client', env=env)
         run(wg, 'setconf', 'wgc1', str(root / 'tmp/client.conf'))
         applied = run(wg, 'show', 'wgc1', 'endpoints').stdout.split()[1]
         expected = '[2001:db8::2]:51820' if endpoint.startswith(('[', '2001:')) else endpoint
@@ -81,7 +85,7 @@ def configurations(root, wg, regressions):
     cases = [('10.250.0.2:51820', '25', '25')]
     if regressions:
         cases += [('10.250.0.2:51820', '0', 'off'), ('10.250.0.2:51820', 'off', 'off'),
-                  ('10.250.0.2:51820', None, '25'), ('[2001:db8::2]:51820', '0', 'off'),
+                  ('10.250.0.2:51820', None, 'off'), ('[2001:db8::2]:51820', '0', 'off'),
                   ('2001:db8::2:51820', '0', 'off')]
     for endpoint, alive, expected in cases:
         try:
@@ -92,11 +96,17 @@ def configurations(root, wg, regressions):
         except (AssertionError, RuntimeError) as error:
             failures.append((endpoint, alive, str(error)))
     assert not failures, failures
+    assert client('10.250.0.2:51820', None, unset=True) == '25'
+    print('PASS unset router keepalive retains the existing 25-second default', flush=True)
     client('10.250.0.2:51820', '0' if regressions else '25')
     env = dict(os.environ, wgs1_priv=keys['server'], wgs1_port='51820', wgs1_psk='1',
                wgs1_c1_enable='1', wgs1_c1_pub=keys['client_pub'], wgs1_c1_psk=keys['psk'],
                wgs1_c1_aips='10.9.0.2/32,192.0.2.0/24')
     arm(root, '/harness/wg-config', 'server', env=env)
+    env.update(wgs1_pub=keys['server_pub'], wgs1_addr='10.9.0.1/24', wgs1_dns='1',
+               wgs1_alive='0', wgs1_c1_priv=keys['client'], wgs1_c1_addr='10.9.0.2/24',
+               wgs1_c1_caips='0.0.0.0/0', lan_ipaddr='10.250.0.2', wan0_ipaddr='10.250.0.2', sw_mode='1')
+    arm(root, '/harness/wg-config', 'export', env=env)
     return keys
 
 
@@ -226,6 +236,19 @@ def main(root, config_only, skip_regressions):
         run(wg, 'setconf', 'wgc1', str(config))
         transfer(peer, b'RTBE90U-WG-RESTART')
         print('PASS restored configuration reconnects and forwards encrypted packets', flush=True)
+        exported = (root / 'tmp/export.conf').read_text()
+        assert 'Endpoint = 10.250.0.2:51820\n' in exported
+        assert 'PersistentKeepalive' not in exported
+        assert 'Address = 10.9.0.2/24\n' in exported and 'DNS = 10.9.0.1\n' in exported
+        # Address and DNS are wg-quick directives; the fixture already owns its addresses/routes.
+        stripped = '\n'.join(line for line in exported.splitlines()
+                             if not line.startswith(('Address =', 'DNS =')))
+        config.write_text(stripped + '\n')
+        run(wg, 'set', 'wgc1', 'peer', keys['server_pub'], 'remove')
+        run(wg, 'setconf', 'wgc1', str(config))
+        assert run(wg, 'show', 'wgc1', 'persistent-keepalive').stdout.split()[1] == 'off'
+        transfer(peer, b'RTBE90U-WG-EXPORTED')
+        print('PASS server-exported profile establishes encrypted forwarding with keepalive off', flush=True)
     finally:
         if fixture:
             for sock in fixture.sockets.values():

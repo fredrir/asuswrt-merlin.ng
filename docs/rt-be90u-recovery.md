@@ -8,8 +8,8 @@ to reboot, reset or flash. The development image is still not ready for that ste
 
 | Artifact | Identity |
 | --- | --- |
-| Experimental candidate | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev11-vpn.trx` |
-| Candidate size / SHA-256 | 59,047,241 bytes / `8563dccabbd021a7690ec91181ade48132271d30edd1923afdd4b7b80390c934` |
+| Experimental candidate | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev13-vpn.trx` |
+| Candidate size / SHA-256 | 59,047,165 bytes / `a1834473eef78c39380275059fc6741beaab56f3524c29edf2d074e0aa7d22bb` |
 | Stock recovery archive | `FW_RT-BE90U_300610258500.zip` |
 | Stock archive SHA-256 | `05a5c8227f3ecc0724787bb333728d55449c6984a823f5143108ce649388df75` |
 | Extracted stock image SHA-256 | `2eb672afc3903cd664d569587c13113dcfc4c1b026acbc9cc8d7fb09441c502a` |
@@ -17,7 +17,7 @@ to reboot, reset or flash. The development image is still not ready for that ste
 | Observed linux volume | `0x0500b000` bytes; candidate fits |
 
 Artifacts are under `/home/fredrir/projects/rt-be90u-port` on `archie`:
-the candidate in `experimental-vpn-dev11-58138/asuswrt/release/src-qca-ipq53xx/image`,
+the candidate in `experimental-vpn-dev13-58138/asuswrt/release/src-qca-ipq53xx/image`,
 stock ZIP in `downloads`, and stock image/rootfs in `image-audit-official-58500`.
 Use the versioned BE9400 filename; the vendor's generic symlink selects BE6500.
 
@@ -33,7 +33,7 @@ has `RTCONFIG_DUAL_TRX`, `RTCONFIG_DUAL_TRX2` and `RTCONFIG_TEMPROOTFS` enabled;
 The official 58500 image was extracted locally from the checksum-verified ASUS
 ZIP. Its actual `libshared.so` (`7415ffec462705b6bc20bf9b875021cb21cdc9d6ed86669ce6eee576a0199522`)
 was run under QEMU with synthetic model/version NVRAM. `check_imageheader()`
-accepts the dev11 candidate and reports the exact size; `check_imagefile()` returns
+accepts the dev13 candidate and reports the exact size; `check_imagefile()` returns
 0. Bad magic is rejected, and payload corruption is rejected. A checksum-correct
 wrong-model header is accepted by these isolated calls. Therefore these calls
 do **not** establish model/ODM enforcement or live upload acceptance. Keep the
@@ -49,7 +49,7 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
   rt-be90u-test:58138 sh /tests/run-image-runtime-test.sh
 ```
 
-Evidence: `logs/vpn-dev11-official-validator.log`. No upload endpoint or flash
+Evidence: `logs/vpn-dev13-official-validator.log`. No upload endpoint or flash
 utility is called, and no router NVRAM is accessed by this test.
 
 ## Dual images and firmware version
@@ -154,7 +154,7 @@ part of the proposed user procedure.
 The user requested continued offline work because other processes cannot be
 interrupted until the following morning. This rehearsal remains deferred and
 unapproved. Time passing does not supply approval. When requested later, it is
-separate from installing dev11:
+separate from installing dev13:
 
 1. Reserve a short outage and keep another Internet connection available for
    coordination. Save the current ASUS settings backup privately. Keep the
