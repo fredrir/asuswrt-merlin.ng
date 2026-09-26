@@ -4,7 +4,8 @@ This branch makes the RT-BE90U firmware build from checked-out repository
 sources. It is based on `master-3006` at
 `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`. It imports the previously tested
 dev14 port (`0dd6c693e2f12bebde29d38b1cd6b0934cce5cad`) and labels this first
-native build `58138-rtbe90u-dev15-vpn`.
+native build `58138-rtbe90u-dev15-vpn`. The current dev16 candidate consolidates
+VPN and script-hook code into the shared 3006 source tree.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -14,9 +15,9 @@ validation have not been performed; the image is not ready to flash.
 
 | Location | Build role and provenance |
 | --- | --- |
-| `release/src/` | 68,199 existing files reused directly, with no changes to the upstream common tree |
+| `release/src/` | 68,208 common inputs, including nine consolidated VPN/script-hook files |
 | `release/src-qca-ipq53xx/linux`, `ipq53xx`, and other platform directories | 68,029 vendor platform inputs from ASUS GPL TUF-BE9400 3.0.0.6.102.58138 |
-| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,923 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
+| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,914 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
 | `release/src-qca-ipq53xx/vendor/` | SDK build glue and auxiliary sources needed to reconstruct the SDK layout |
 | `release/src-qca-ipq53xx/sources.json` | Explicit common/override/platform file lists, SDK aliases, required empty directories and import provenance |
 | `tools/rt-be90u/` | Source assembly, builder provisioning, image/linkage checks and offline runtime fixtures |
@@ -30,8 +31,8 @@ change; subsequent integration changes are recorded in Git.
 
 The overrides avoid replacing Broadcom sources with the older QCA SDK. They
 also create maintenance work: fixes to an overridden common file do not flow
-into this platform automatically. Shared rc, networking and UI changes need
-consolidation with appropriate QCA conditionals after agreement on this layout.
+into this platform automatically. The OpenVPN library and custom script hooks now use common sources with
+IPQ53xx conditionals. Remaining rc, networking and UI changes need consolidation with appropriate QCA conditionals after agreement on this layout.
 Large package differences include curl, strongSwan, wget, libxml2 and iproute2.
 These versions need their own compatibility/security review. This branch has
 not established a supported update path for all vendor packages.
@@ -91,8 +92,9 @@ docker run --rm --network none --ulimit core=0 \
 ```
 
 The native entry point is `make -C release/src-qca-ipq53xx rt-be90u`. The builder
-already sets that working directory. The existing Broadcom entry points and
-CI matrix are unchanged.
+already sets that working directory. The existing Broadcom entry points and CI matrix are unchanged. The image
+workflow now fetches from the repository that triggered the push, or the pull
+request head repository, so fork branches can run those existing builds.
 
 `prepare-native.py` assembles a private SDK tree in
 `release/src-qca-ipq53xx/.build/source`. Normal copies keep generated writes
@@ -180,3 +182,45 @@ SquashFS begins at byte 4,322,736. The exact
 suites and limits. Browser and Entware baselines remain dev12 and dev11; those
 suites were not rerun for this source-layout change. Other-model sources were
 checked for changes, but their firmware builds were not run.
+
+## Dev16 shared-code consolidation
+
+All eight remaining `libovpn` overrides and `shared/scripts.c` now live in
+`release/src/router`. Their platform-overlay copies have been removed. Future
+upstream edits to these files therefore reach the QCA build directly.
+IPQ53xx guards retain its VPN routing/IPv6 blocking, longer client-password ABI,
+NVRAM custom-config fallback and stricter script-enable handling. Other models
+retain their previous behavior. The one deliberate common fix removes an extra
+integer placeholder from a parser log message that had only one argument.
+
+```sh
+python3 tools/rt-be90u/check-common-sources.py
+```
+
+This check needs the recorded baseline Git objects and a C preprocessor. It
+compares the nine files across 128 architecture/feature profiles each (1,152
+comparisons), including IPv6, WireGuard, multi-LAN and automatic-WAN variants.
+IPQ53xx must match the validated dev15 port; other profiles must match upstream
+apart from the documented diagnostic fix. Includes are removed for this check:
+it tests conditional code selection, not header compatibility, linking or a
+complete Broadcom build.
+
+Dev16 was built incrementally in the native private tree after preserving the
+completed dev15 source. Independent fresh source assembly verifies all 150,610
+inputs; the input/index audit confirms that no untracked source is required.
+The runtime tunnel fixture now includes the actual target `rtconfig.h` and
+asserts the IPQ53xx password-field size before testing the packaged library.
+Without that target configuration, a standalone consumer used the non-QCA
+structure layout, which the static-key tunnel test correctly rejected.
+
+The final dev16 image passed all 11 VPN/image-validator suites, the script-hook
+fixture, actual Entware installation/postinst/packaged-hook lifecycle tests,
+25 helper tests, linkage and content audits. The kernel configuration and all
+81 ECM selector instruction words match dev15. No router was modified.
+
+The image is 59,049,753 bytes; SHA-256:
+`c064768688b2b8f62b4ebccadf07d37d15d83b67e89dcaf09aa988b5859c2d02`.
+SquashFS begins at byte 4,322,736. See the
+[dev16 validation summary](rt-be90u-dev16-validation.json) for exact source,
+fixture and check identities. Browser validation remains at dev12; hardware and
+full firmware service orchestration still require validation.
