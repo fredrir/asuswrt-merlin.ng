@@ -84,7 +84,7 @@
 +++ b/release/src/router/extendno.conf
 @@ -1 +1 @@
 -EXTENDNO=58138-rtbe90u-dev1
-+EXTENDNO=58138-rtbe90u-dev11-vpn
++EXTENDNO=58138-rtbe90u-dev12-vpn
 --- a/release/src/router/httpd/Makefile
 +++ b/release/src/router/httpd/Makefile
 @@ -240,8 +240,8 @@
@@ -2093,3 +2093,36 @@
  
  #ifdef RTCONFIG_HTTPS
  	if(do_ssl)
+--- a/release/src/router/shared/vpn_utils.c
++++ b/release/src/router/shared/vpn_utils.c
+@@ -446,7 +446,8 @@
+ 		if (inet_pton(AF_INET6, host, address) != 1) goto done;
+ 	} else {
+ 		host = endpoint;
+-		if (!(port = strchr(host, ':')) || port != strrchr(host, ':')) goto done;
++		/* Match wg setconf: an unbracketed IPv6 endpoint uses the last colon. */
++		if (!(port = strrchr(host, ':'))) goto done;
+ 		*port++ = '\0';
+ 		if (!wgconf_host(host)) goto done;
+ 	}
+--- a/release/src/router/rc/wireguard.c
++++ b/release/src/router/rc/wireguard.c
+@@ -903,7 +903,8 @@
+ 	char aips[4096] = {0};
+ 	char ep_addr[128] = {0};
+ 	int ep_port = 51820;
+-	int alive = nvram_pf_get_int(prefix, "alive");
++	/* Zero disables keepalive; only an unset value uses the default. */
++	int alive = nvram_pf_safe_get(prefix, "alive")[0] ? nvram_pf_get_int(prefix, "alive") : 25;
+ 	char *p;
+ 	char buffer[32];
+ 	int unit = 1;
+@@ -944,7 +945,7 @@
+ 			);
+ 		if (psk[0] != '\0')
+ 			fprintf(fp, "PresharedKey = %s\n", psk);
+-		fprintf(fp, "PersistentKeepalive = %d\n", alive ?: 25);
++		fprintf(fp, "PersistentKeepalive = %d\n", alive);
+ 
+ 		fclose(fp);
+ 

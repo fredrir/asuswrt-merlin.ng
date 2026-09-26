@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 failed = []
-for case in ('valid', 'whitespace', 'long-allowedips', 'missing-file', 'empty',
+for case in ('valid', 'whitespace', 'unbracketed-ipv6', 'long-allowedips', 'missing-file', 'empty',
              'missing-equals', 'wrong-key', 'multiple-peers', 'unsupported-option',
              'oversized-allowedips', 'unit-zero', 'unit-six', 'invalid-mtu',
              'invalid-endpoint', 'invalid-prefix', 'duplicate-key', 'embedded-nul'):

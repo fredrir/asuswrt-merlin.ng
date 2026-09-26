@@ -248,9 +248,9 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Status | Build and offline testing only; not ready to flash |
 | Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
 | Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
-| Version | `58138-rtbe90u-dev11-vpn` |
-| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev11-vpn.trx`; 59,047,241 bytes |
-| SHA-256 | `8563dccabbd021a7690ec91181ade48132271d30edd1923afdd4b7b80390c934` |
+| Version | `58138-rtbe90u-dev12-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev12-vpn.trx`; 59,047,749 bytes |
+| SHA-256 | `a13d3795b762e525fa3553df599560001d0ac65f200c52617c1e2c218f482bff` |
 | Superseded build | `dev2-vpn` omitted `RTCONFIG_VPN_FUSION_MERLIN` because the SDK selected a different target file; its library tests did not establish the routing build configuration |
 | Configuration guard | Both target files enable Merlin VPN integration; compilation and ARM tests reject configurations without that switch |
 | Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
@@ -262,17 +262,25 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
 | ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
 | Source integrity | All 599 pre-build inputs match independent fresh preparation; 594 remain identical after compilation, with five expected Autotools-generated Makefiles separately accounted for |
-| Build | Incremental build in a separate copy of completed dev10; version, shared importer and HTTP upload handler changed; `make` exit 0; independent fresh preparation in `experimental-vpn-dev11-final-repro-58138` |
-| Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector returns disabled; `rc` is byte-identical to the previously inspected `dev4-vpn` binary |
+| Build | Incremental build in a separate copy of completed dev11; version, shared importer and WireGuard config writer changed; `make` exit 0; independent fresh preparation in `experimental-vpn-dev12-final-repro-58138` |
+| Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector in the new packaged `rc` was disassembled again and still returns disabled |
 | Regression checks | ARM test rejects `dev2-vpn`; browser tests reproduce `dev3-vpn` UI/save failures and `dev4-vpn` extra-certificate loss |
 | Browser fixes | Import VPN Director icons and retain them during packaging; add Merlin name validation; process generic VPN settings after their profile selectors |
 | Certificate fixes | Save extra certificates and submitted generic-key values; read and accept up to 7,999 bytes; reject oversized indexed and generic submissions |
 | Browser result | Six pages/tabs, VPN Director CRUD, OpenVPN settings, certificates, long chains, profile import/isolation and WireGuard settings pass against the extracted final image |
 | Artifact checks | Both CRCs valid; fits observed UBI volume; `rc`, HTTP and OpenVPN linkage passes; 792 runtime ELFs are AArch64; 11 coprocessor ELFs unchanged; SquashFS offset 4323076 |
-| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev11-58138` and `image-audit-vpn-dev11` on `archie`; results in `logs/vpn-dev11-*` |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev12-58138` and `image-audit-vpn-dev12` on `archie`; results in `logs/vpn-dev12-*` |
 | Current-router migration | Read-only inspection found no Fusion profiles, device policies, default VPN or SDN VPN assignments; no VPN assignments need conversion on this router |
 | Encrypted OpenVPN | Generated static/TLS/tls-crypt/tls-crypt-v2 configurations, LAN forwarding, transport ciphertext, disconnect blocking, restart and wrong-server rejection pass |
-| Remaining work | Encrypted WireGuard and full router service lifecycle; IPv6 policy protection; general stock VPN Fusion/SDN migration; add-on APIs; remaining UI paths; recovery and hardware validation |
+| Encrypted WireGuard | Image ARM keys/import/routing and exact source config writers with native host-kernel tunnels; forwarding, outage, kill switch, wrong PSK and restart pass; router kernel/full rc pending |
+| Remaining work | Full router service lifecycle; IPv6 policy protection; general stock VPN Fusion/SDN migration; add-on APIs; remaining UI paths; recovery and hardware validation |
+
+Dev12 reruns the image/source/linkage audits, ARM configuration/import checks,
+packet-policy suite, browser suite, official userspace image validator and new WG
+tunnel suite. Earlier dev11 OpenVPN/Entware results below remain their recorded
+baseline; those suites were not repeated for this WG-only change. The OpenVPN
+and libovpn binaries are unchanged. The official validator still does not prove
+model enforcement or bootloader acceptance.
 
 The supplied Merlin checkout must contain commit `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`.
 
@@ -612,4 +620,59 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
   --mount type=bind,src=/absolute/path/to/rootfs,dst=/firmware,readonly \
   --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
   rt-be90u-test:58138 sh /tests/run-wg-import-test.sh
+```
+
+
+## WireGuard configuration and encrypted lifecycle
+
+Dev12 preserves an explicit PersistentKeepalive value of `0`/`off` in the generated
+client configuration. The vendor writer previously changed it to 25; the existing
+25-second default still applies when no value is set. The importer also accepts
+unbracketed IPv6 endpoints, using the last colon as the port separator just as
+`wg setconf` does. The host and port remain validated. Dev11 failures are recorded
+in `logs/vpn-dev11-wg-config-regression.log`.
+
+`tests/run-wg-tunnel-test.sh` runs entirely in an isolated network-none container.
+The actual image ARM `wg` generates keys; native public-key derivation agrees.
+The actual ARM shared importer loads a synthetic provider profile. The fixture
+extracts and compiles the exact `_wg_resolv_ep`, `_wg_client_gen_conf` and
+`_wg_server_gen_conf` functions from the corresponding prepared source, along
+with their `trim_r` helper. Source and image-library hashes are logged. Custom
+scripts are disabled in synthetic NVRAM. This tests those source functions with
+image libraries; it does not execute the packaged rc service-start sequence.
+
+Native `wg`, compiled offline from the supplied SDK source into disposable storage,
+bridges QEMU's unsupported netlink boundary. Crypto runs in the already-loaded
+host WireGuard kernel. No global module, binfmt or physical-interface changes are
+needed. A second isolated namespace holds the peer. Actual ARM `libovpn` installs
+the policy and kill-switch rules through native iproute2/iptables adapters.
+
+Dev12 passes:
+
+- Numeric IPv4 and bracketed/unbracketed IPv6 endpoint import, source resolution,
+  config writing and native applied endpoint checks.
+- Explicit `0`/`off`, explicit 25 and omitted keepalive values in applied WG state.
+- Encrypted LAN payload forwarding with no plaintext marker on transport or WAN.
+- Peer outage and return; interface removal with library policy cleanup and IPv4
+  kill-switch blocking; wrong-PSK handshake rejection; restored encrypted forwarding.
+- Eighteen standalone ARM importer cases, including unbracketed IPv6 and zero
+  profile writes for rejected imports.
+
+Evidence: `logs/vpn-dev12-wg-tunnel.log`, `logs/vpn-dev12-wg-import.log`,
+`logs/vpn-dev12-network.log` and `logs/vpn-dev12-browser.log`.
+IPv6 endpoint parsing is not IPv6 policy protection. The previously demonstrated
+IPv6 policy escape remains unresolved. Router-kernel WireGuard, full rc lifecycle,
+DNS proxy integration, boot/persistence and hardware tests remain outstanding.
+
+```sh
+docker run --rm --network none --read-only --ulimit core=0 \
+  --cap-add NET_ADMIN --cap-add SYS_ADMIN \
+  --sysctl net.ipv4.ip_forward=1 \
+  --sysctl net.ipv4.conf.all.rp_filter=0 --sysctl net.ipv4.conf.default.rp_filter=0 \
+  --sysctl net.ipv6.conf.all.forwarding=1 \
+  --tmpfs /etc/iproute2 --tmpfs /tmp:exec,dev,size=512m \
+  --mount type=bind,src=/absolute/path/to/rootfs,dst=/firmware,readonly \
+  --mount type=bind,src=/absolute/path/to/matching/asuswrt,dst=/work,readonly \
+  --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
+  rt-be90u-network-test:58138 sh /tests/run-wg-tunnel-test.sh
 ```

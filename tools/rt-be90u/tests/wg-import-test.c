@@ -39,7 +39,8 @@ int main(int argc, char **argv)
 	int unit = 1, good, ret, i;
 	if (argc != 2) return 2;
 	test = argv[1];
-	good = !strcmp(test, "valid") || !strcmp(test, "whitespace") || !strcmp(test, "long-allowedips");
+	good = !strcmp(test, "valid") || !strcmp(test, "whitespace") || !strcmp(test, "long-allowedips")
+	       || !strcmp(test, "unbracketed-ipv6");
 	setenv("wgc1_priv", "keep-existing-private", 1);
 	setenv("wgc1_desc", "keep-existing-description", 1);
 	setenv("wgc2_priv", "keep-other-profile", 1);
@@ -55,6 +56,9 @@ int main(int argc, char **argv)
 			      "\r\n PresharedKey = " PSK "\r\n AllowedIPs = 0.0.0.0/0, ::/0\r\n"
 			      " Endpoint = [2001:db8::1]:51820\r\n PersistentKeepalive = 25\r\n", fp);
 		else if (!strcmp(test, "empty")) { /* Deliberately empty. */ }
+		else if (!strcmp(test, "unbracketed-ipv6"))
+			fputs(INTERFACE "[Peer]\nPublicKey = " PUBLIC "\nPresharedKey = " PSK
+			      "\nAllowedIPs = 0.0.0.0/0,::/0\nEndpoint = 2001:db8::1:51820\nPersistentKeepalive = 25\n", fp);
 		else if (!strcmp(test, "missing-equals"))
 			fputs("[Interface]\nPrivateKey\n", fp);
 		else if (!strcmp(test, "wrong-key"))
