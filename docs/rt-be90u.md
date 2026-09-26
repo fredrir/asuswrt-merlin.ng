@@ -1,19 +1,19 @@
 # RT-BE90U port
 
-The latest checkpoint is `dev11-vpn` (2026-09-26). WireGuard imports now validate
-the whole profile before changing settings, preserving existing profiles on
-invalid input and avoiding parser crashes/truncation. It retains authenticated
-WireGuard QR exports, working OpenVPN downloads and the earlier OpenVPN routing,
-cipher and 2.6.16 package fixes. The packaged image passes actual encrypted OpenVPN forwarding,
-disconnect blocking, restart and TLS identity-rejection tests in isolated containers.
-IPv4 policy/DNS, browser and Entware fixtures also pass. It is **not ready to flash**:
-IPv6 bypasses the imported IPv4 kill switches, and router service integration,
-physical recovery and hardware operation remain unverified.
+The latest checkpoint is `dev14-vpn` (2026-09-26). Whole-network VPN kill switches
+now block IPv6 forwarding for global OpenVPN, configured VPN network assignments
+and catch-all Director rules. The guard survives firewall replacement and retains
+router-local access. This blocks IPv6 on those networks even while an IPv4 tunnel
+is running; it does not implement IPv6 VPN routing. IPv4 device/destination rules
+still cannot protect their IPv6 counterparts. The image passes offline IPv6/IPv4
+packet tests and encrypted OpenVPN/WireGuard tests. It is **not ready to flash**:
+full service orchestration, physical recovery and hardware operation remain
+unverified.
 See [recovery readiness](rt-be90u-recovery.md) before planning a hardware test.
 
 | Name | Value |
 | --- | --- |
-| Status | Experimental dev11 VPN image built and tested offline; IPv6 policy protection and full Merlin integration unfinished; nothing flashed |
+| Status | Experimental dev14 VPN image built and tested offline; whole-network IPv6 blocking added; dual-stack policies and full Merlin integration unfinished; nothing flashed |
 | Requested scope | JFFS scripts, Entware, custom service configuration, VPN/DNS/network controls, broad Merlin compatibility |
 | Hardware inspected | 2026-09-25, stock firmware over SSH |
 | `productid` | `TUF-BE9400` |
@@ -248,9 +248,9 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Status | Build and offline testing only; not ready to flash |
 | Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
 | Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
-| Version | `58138-rtbe90u-dev13-vpn` |
-| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev13-vpn.trx`; 59,047,165 bytes |
-| SHA-256 | `a1834473eef78c39380275059fc6741beaab56f3524c29edf2d074e0aa7d22bb` |
+| Version | `58138-rtbe90u-dev14-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev14-vpn.trx`; 59,048,661 bytes |
+| SHA-256 | `17304e6a80b7b7c5337b05647190675e78fc37f7625c32413dc9e98b371c63c6` |
 | Superseded build | `dev2-vpn` omitted `RTCONFIG_VPN_FUSION_MERLIN` because the SDK selected a different target file; its library tests did not establish the routing build configuration |
 | Configuration guard | Both target files enable Merlin VPN integration; compilation and ARM tests reject configurations without that switch |
 | Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
@@ -262,14 +262,14 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
 | ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
 | Source integrity | All 599 pre-build inputs match independent fresh preparation; 594 remain identical after compilation, with five expected Autotools-generated Makefiles separately accounted for |
-| Build | Incremental build in a separate copy of completed dev12; version, shared importer and WireGuard server exporter changed; `make` exit 0; independent fresh preparation in `experimental-vpn-dev13-final-repro-58138` |
+| Build | Incremental build in a separate copy of completed dev13; libovpn IPv6 guard plus rc firewall/WG/SDN hooks; `make` exit 0; independent fresh preparation in `experimental-vpn-dev14-final-repro-58138` |
 | Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector in the new packaged `rc` was disassembled again and still returns disabled |
 | Regression checks | ARM test rejects `dev2-vpn`; browser tests reproduce `dev3-vpn` UI/save failures and `dev4-vpn` extra-certificate loss |
 | Browser fixes | Import VPN Director icons and retain them during packaging; add Merlin name validation; process generic VPN settings after their profile selectors |
 | Certificate fixes | Save extra certificates and submitted generic-key values; read and accept up to 7,999 bytes; reject oversized indexed and generic submissions |
 | Browser result | Six pages/tabs, VPN Director CRUD, OpenVPN settings, certificates, long chains, profile import/isolation and WireGuard settings pass; last browser run used the extracted dev12 image |
 | Artifact checks | Both CRCs valid; fits observed UBI volume; `rc`, HTTP and OpenVPN linkage passes; 792 runtime ELFs are AArch64; 11 coprocessor ELFs unchanged; SquashFS offset 4323076 |
-| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev13-58138` and `image-audit-vpn-dev13` on `archie`; results in `logs/vpn-dev13-*` |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev14-58138` and `image-audit-vpn-dev14` on `archie`; results in `logs/vpn-dev14-*` |
 | Current-router migration | Read-only inspection found no Fusion profiles, device policies, default VPN or SDN VPN assignments; no VPN assignments need conversion on this router |
 | Encrypted OpenVPN | Generated static/TLS/tls-crypt/tls-crypt-v2 configurations, LAN forwarding, transport ciphertext, disconnect blocking, restart and wrong-server rejection pass |
 | Encrypted WireGuard | Image ARM keys/import/routing and exact source config writers with native host-kernel tunnels; forwarding, outage, kill switch, wrong PSK, restart and server-exported connections pass; router kernel/full rc pending |
@@ -415,11 +415,12 @@ iproute2 `ss200127`, and iptables `1.8.4` with nftables.
 | Overlapping OVPN/WG policies | Routing priority, DNS order, configured fallback and final blocking pass |
 | OpenVPN up handler with missing gateway | Protected IPv4 stays blocked; supplying the gateway restores VPN routing |
 | Global OpenVPN mode | LAN and SDN IPv4 protection passes |
-| IPv6 DNS with global kill switch | **Known gap: packet escapes through WAN** |
+| IPv6 DNS with global kill switch | Dev14 blocks forwarded packets from LAN and unassigned SDNs |
 | Dev5 regression | Destination-only traffic escapes through WAN for both OVPN and WG |
 
-The IPv6 probe deliberately records the gap rather than counting it as protection.
-The suite's successful exit establishes the IPv4 assertions only. It does not
+The IPv6 global-mode probe now requires blocking. The separate dev14 suite below
+checks the guard lifecycle and explicitly retains the IPv4 device-selector gap.
+The suite's successful exit establishes these IPv4 and IPv6 assertions. It does not
 cover encrypted DNS, actual handshakes, daemon reconnect timing, all firewall
 chains, acceleration or router-originated DNS proxy behavior.
 
@@ -665,8 +666,9 @@ Dev12 passes:
 
 Evidence: `logs/vpn-dev12-wg-tunnel.log`, `logs/vpn-dev12-wg-import.log`,
 `logs/vpn-dev12-network.log` and `logs/vpn-dev12-browser.log`.
-IPv6 endpoint parsing is not IPv6 policy protection. The previously demonstrated
-IPv6 policy escape remains unresolved. Router-kernel WireGuard, full rc lifecycle,
+IPv6 endpoint parsing alone does not establish policy protection. Dev14 adds
+whole-network blocking as described below; device policies still lack IPv6
+protection. Router-kernel WireGuard, full rc lifecycle,
 DNS proxy integration, boot/persistence and hardware tests remain outstanding.
 
 ```sh
@@ -712,3 +714,65 @@ Evidence: `logs/vpn-dev13-wg-export.log`, `logs/vpn-dev13-wg-tunnel.log`,
 `logs/vpn-dev13-wg-import.log` and `logs/vpn-dev13-config.log`. Source, image,
 linkage and official userspace-validator evidence is in the other
 `logs/vpn-dev13-*` files. The IPv6 policy and hardware limitations above remain.
+
+## IPv6 blocking for protected networks
+
+Dev14 addresses the whole-network escape reproduced on dev13 in
+`logs/vpn-dev13-ipv6-regression.log`. The SDK kernel disables
+`CONFIG_IPV6_MULTIPLE_TABLES`, so IPv6 `ip rule` commands cannot provide a guard.
+The new `VPN6KS` filter chain drops forwarded IPv6 from interfaces protected by:
+
+- An enabled, enforced OpenVPN client in global routing mode (LAN and unassigned
+  enabled SDNs).
+- An enabled, enforced OpenVPN/WireGuard client assigned to a configured network.
+- An enabled, enforced client with an enabled catch-all Director rule (LAN and
+  enabled SDNs). Empty, `0.0.0.0` and `0.0.0.0/0` selectors are recognized.
+
+This intentionally blocks **all IPv6 forwarding from those interfaces**, even
+while the IPv4 VPN is connected. Router-local INPUT/OUTPUT remain available.
+Individual IPv4 source/destination rules and IPv4 WAN exceptions cannot identify
+corresponding IPv6 addresses. A catch-all guard therefore also blocks IPv6 from
+devices with an IPv4 WAN exception. IPv4-only device/destination policies still
+leave IPv6 unprotected; dual-stack policy routing remains unfinished.
+
+The chain is inserted before existing FORWARD accepts, including established
+connections. Full default/single-WAN/multi-WAN firewall writers include it in
+their filter transaction. Runtime updates replace the chain with a `--noflush`
+restore transaction, recomputing all profiles so disabling one client cannot
+remove another's guard. VPN policy updates, WG start/stop and SDN changes refresh
+the guard. A stopped client remains protected while its enable/enforce settings
+are retained; disabling enforcement or removing the assignment removes its
+protection. This code is limited to the IPQ53xx Merlin variant.
+
+The image's actual ARM libovpn passes TCP/UDP DNS and data packet tests for
+global/SDN/catch-all rules, policy removal/reassignment, enabled-client overlap,
+disabled clients, router-local IPv6 input, outbound reconnect traffic and repeated
+updates. The test applies the exact library firewall writer within a full filter
+replacement, with a pre-existing unconditional ACCEPT to check rule ordering.
+Both replacement and runtime refresh retain one jump at the head of FORWARD.
+Source hooks are compiled into rc, but full packaged rc orchestration, boot timing,
+concurrent firewall writers, router ip6tables/kernel and hardware acceleration
+are not exercised. Native ip6tables-nft bridges QEMU's kernel boundary in the
+isolated fixture; no host routing or physical interface is changed.
+
+```sh
+docker run --rm --network none --read-only --ulimit core=0 --cap-add NET_ADMIN \
+  --sysctl net.ipv4.ip_forward=1 \
+  --sysctl net.ipv4.conf.all.rp_filter=0 --sysctl net.ipv4.conf.default.rp_filter=0 \
+  --sysctl net.ipv6.conf.all.forwarding=1 \
+  --tmpfs /etc/iproute2 --tmpfs /tmp:exec,size=512m \
+  --mount type=bind,src=/absolute/path/to/rootfs,dst=/firmware,readonly \
+  --mount type=bind,src=/absolute/path/to/matching/asuswrt,dst=/work,readonly \
+  --mount "type=bind,src=$PWD/tools/rt-be90u/tests,dst=/tests,readonly" \
+  rt-be90u-network-test:58138 sh /tests/run-vpn-ipv6-test.sh
+```
+
+Dev14 passes source/image/linkage audits, 18 helper tests, ARM configuration and
+18 importer checks, IPv4 policy/DNS tests, all four encrypted OpenVPN modes,
+WG export/encrypted lifecycle and the official 58500 userspace image validator.
+The packaged ECM selector still returns zero. Evidence is in
+`logs/vpn-dev14-*`; all tests use the final extracted image. Browser coverage
+remains dev12 and Entware coverage remains dev11; neither suite was repeated.
+The HTTP and OpenVPN binaries remain identical to those earlier candidates.
+The official validator's synthetic wrong-model acceptance limitation remains;
+these results do not establish flash readiness or supported hardware operation.

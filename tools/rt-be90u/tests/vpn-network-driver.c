@@ -7,6 +7,8 @@
 #include <amvpn_routing.h>
 
 extern void ovpn_client_up_handler(int unit);
+/* Weak for running regressions against earlier packaged libraries. */
+extern void amvpn_write_ipv6_killswitch(FILE *fp) __attribute__((weak));
 
 #if !defined(RTCONFIG_SOC_IPQ53XX) || !defined(RTCONFIG_VPN_FUSION_MERLIN)
 #error "Test requires the RT-BE90U Merlin VPN build configuration"
@@ -25,7 +27,11 @@ int main(int argc, char **argv)
 		return 2;
 	proto = !strcmp(argv[2], "ovpn") ? VPNDIR_PROTO_OPENVPN : VPNDIR_PROTO_WIREGUARD;
 	sdn = argc > 3 ? argv[3] : NULL;
-	if (!strcmp(argv[1], "rules")) {
+	if (!strcmp(argv[1], "ipv6-write")) {
+		if (!amvpn_write_ipv6_killswitch)
+			return 3;
+		amvpn_write_ipv6_killswitch(stdout);
+	} else if (!strcmp(argv[1], "rules")) {
 		amvpn_set_wan_routing_rules();
 		amvpn_set_routing_rules(1, proto);
 	} else if (!strcmp(argv[1], "clear")) {

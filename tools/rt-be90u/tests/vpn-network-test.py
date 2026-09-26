@@ -65,6 +65,8 @@ def prepare(root):
     copy_native(root, '/bin/busybox', '/bin/grep')
     copy_native(root, '/sbin/ip', '/usr/sbin/ip')
     copy_native(root, '/usr/sbin/xtables-nft-multi', '/usr/sbin/iptables')
+    copy_native(root, '/usr/sbin/xtables-nft-multi', '/usr/sbin/ip6tables')
+    copy_native(root, '/usr/sbin/xtables-nft-multi', '/usr/sbin/ip6tables-restore')
     shutil.copytree('/usr/lib/x86_64-linux-gnu/xtables', root / 'usr/lib/x86_64-linux-gnu/xtables')
     copy_native(root, '/usr/bin/qemu-aarch64-static', '/qemu')
     # tmpfs is nodev. These are disposable regular files, never host devices.
@@ -94,6 +96,7 @@ def setup_links():
     for table, iface, index in [('ovpnc1', 'tun11', 2), ('wgc1', 'wgc1', 3)]:
         ip('route', 'add', 'default', 'via', f'10.{index}.0.2', 'dev', iface, 'onlink', 'table', table)
     ip('-6', 'addr', 'add', '2001:db8:1::1/64', 'dev', 'br0', 'nodad')
+    ip('-6', 'addr', 'add', '2001:db8:3::1/64', 'dev', 'br1', 'nodad')
     ip('-6', 'addr', 'add', '2001:db8:2::1/64', 'dev', 'wan0', 'nodad')
     ip('-6', 'neigh', 'add', '2001:db8:2::2', 'lladdr', '02:00:00:00:00:02', 'dev', 'wan0')
     ip('-6', 'route', 'add', 'default', 'via', '2001:db8:2::2', 'dev', 'wan0')
@@ -314,11 +317,9 @@ def exercise(fixture, protocol):
     fixture.call('clear', 'ovpn')
     fixture.packet('192.0.2.10', '203.0.113.99', None)
     fixture.packet('198.51.100.10', '203.0.113.99', None, iface='br1')
-    # Known limit, recorded explicitly: these imported policy/kill-switch paths
-    # configure IPv4 only. A positive IPv6 packet demonstrates the missing coverage.
-    fixture.packet('2001:db8:1::10', '2001:db8:ffff::53', 'wan0', port=53)
-    print('KNOWN LIMIT: IPv6 DNS bypasses the IPv4 global kill switch', flush=True)
-    print('PASS ovpn global routing and LAN/SDN IPv4 kill switch', flush=True)
+    fixture.packet('2001:db8:1::10', '2001:db8:ffff::53', None, port=53)
+    fixture.packet('2001:db8:3::10', '2001:db8:ffff::53', None, port=53, iface='br1')
+    print('PASS ovpn global routing, IPv4 kill switch and LAN/SDN IPv6 blocking', flush=True)
 
 
 if __name__ == '__main__':
