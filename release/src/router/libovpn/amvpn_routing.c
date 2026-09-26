@@ -795,6 +795,172 @@ void wgc_set_exclusive_dns(int unit) {
 #endif
 
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_IPV6)
+/* The IPQ53xx kernel has no IPv6 policy tables. Until dual-stack policy
+ * routing exists, protect whole-interface assignments by blocking forwarded
+ * IPv6, including while the IPv4 tunnel is up. Never guess an IPv6 identity
+ * from an IPv4 source/destination rule.
+ */
+static int amvpn_ipv6_enforced(vpndir_proto_t proto, int unit)
+{
+	char prefix[32];
+	int rgw;
+
+	if (proto == VPNDIR_PROTO_OPENVPN && unit >= 1 && unit <= OVPN_CLIENT_MAX) {
+		snprintf(prefix, sizeof(prefix), "vpn_client%d_", unit);
+		rgw = nvram_pf_get_int(prefix, "rgw");
+		return nvram_pf_get_int(prefix, "enforce") && ovpn_is_client_enabled(unit) &&
+		       (rgw == OVPN_RGW_ALL || rgw == OVPN_RGW_POLICY);
+	}
+#ifdef RTCONFIG_WIREGUARD
+	if (proto == VPNDIR_PROTO_WIREGUARD && unit >= 1 && unit <= WG_CLIENT_MAX) {
+		snprintf(prefix, sizeof(prefix), "wgc%d_", unit);
+		return nvram_pf_get_int(prefix, "enforce") && nvram_pf_get_int(prefix, "enable");
+	}
+#endif
+	return 0;
+}
+
+static int amvpn_ipv4_wildcard(const char *address)
+{
+	return !*address || !strcmp(address, "0.0.0.0") || !strcmp(address, "0.0.0.0/0");
+}
+
+static int amvpn_ipv6_catchall(vpndir_proto_t proto, int unit)
+{
+	char buffer[8000], *next, *rule;
+	char *enable, *desc, *src, *dst, *target;
+
+	amvpn_get_policy_rules(unit, buffer, sizeof(buffer), proto);
+	next = buffer;
+	while ((rule = strsep(&next, "<")) != NULL) {
+		if (vstrsep(rule, ">", &enable, &desc, &src, &dst, &target) == 5 &&
+		    atoi(enable) && strcmp(target, "WAN") &&
+		    amvpn_ipv4_wildcard(src) && amvpn_ipv4_wildcard(dst))
+			return 1;
+	}
+	return 0;
+}
+
+static void amvpn_ipv6_drop(FILE *fp, const char *ifname)
+{
+	const char *p;
+	if (!ifname || !*ifname || strlen(ifname) >= IFNAMSIZ)
+		return;
+	/* Interface names are emitted into an iptables-restore file. */
+	for (p = ifname; *p; ++p)
+		if (!isalnum((unsigned char)*p) && *p != '_' && *p != '-' && *p != '.')
+			return;
+	fprintf(fp, "-A VPN6KS -i %s -j DROP\n", ifname);
+}
+
+/* Called inside rc's full filter transaction, after other FORWARD rules.
+ * Insertion at the head also protects already-established connections.
+ */
+void amvpn_write_ipv6_killswitch(FILE *fp)
+{
+	int unit, global = 0, catchall = 0;
+	char prefix[32];
+#ifdef RTCONFIG_MULTILAN_CFG
+	MTLAN_T *pmtl;
+	VPN_VPNX_T vpnx;
+	size_t mtl_sz = 0;
+	int i, j, protect;
+#endif
+
+	for (unit = 1; unit <= OVPN_CLIENT_MAX; ++unit) {
+		if (!amvpn_ipv6_enforced(VPNDIR_PROTO_OPENVPN, unit))
+			continue;
+		snprintf(prefix, sizeof(prefix), "vpn_client%d_", unit);
+		if (nvram_pf_get_int(prefix, "rgw") == OVPN_RGW_ALL)
+			global = 1;
+		else if (amvpn_ipv6_catchall(VPNDIR_PROTO_OPENVPN, unit))
+			catchall = 1;
+	}
+#ifdef RTCONFIG_WIREGUARD
+	for (unit = 1; unit <= WG_CLIENT_MAX; ++unit)
+		if (amvpn_ipv6_enforced(VPNDIR_PROTO_WIREGUARD, unit) &&
+		    amvpn_ipv6_catchall(VPNDIR_PROTO_WIREGUARD, unit))
+			catchall = 1;
+#endif
+
+	fprintf(fp, ":VPN6KS - [0:0]\n");
+	if (global || catchall)
+		amvpn_ipv6_drop(fp, nvram_safe_get("lan_ifname"));
+#ifdef RTCONFIG_MULTILAN_CFG
+	pmtl = (MTLAN_T *)INIT_MTLAN(sizeof(MTLAN_T));
+	if (pmtl) {
+		get_mtlan(pmtl, &mtl_sz);
+		/* Include the default network if it has an explicit VPN assignment. */
+		for (i = 0; i < mtl_sz; ++i) {
+			if (!pmtl[i].enable || !*pmtl[i].nw_t.ifname)
+				continue;
+			if ((global || catchall) && !strcmp(pmtl[i].nw_t.ifname, nvram_safe_get("lan_ifname")))
+				continue;
+			protect = catchall || (global && pmtl[i].sdn_t.vpnc_idx == 0);
+			if (pmtl[i].sdn_t.vpnc_idx && get_vpnx_by_vpnc_idx(&vpnx, pmtl[i].sdn_t.vpnc_idx)) {
+				if (vpnx.proto == VPN_PROTO_OVPN)
+					protect |= amvpn_ipv6_enforced(VPNDIR_PROTO_OPENVPN, vpnx.unit);
+#ifdef RTCONFIG_WIREGUARD
+				else if (vpnx.proto == VPN_PROTO_WG)
+					protect |= amvpn_ipv6_enforced(VPNDIR_PROTO_WIREGUARD, vpnx.unit);
+#endif
+			}
+			if (!protect)
+				continue;
+			/* Duplicate network records must not duplicate the rule. */
+			for (j = 0; j < i; ++j)
+				if (pmtl[j].enable && pmtl[j].sdn_t.vpnc_idx == pmtl[i].sdn_t.vpnc_idx &&
+				    !strcmp(pmtl[j].nw_t.ifname, pmtl[i].nw_t.ifname))
+					break;
+			if (j == i)
+				amvpn_ipv6_drop(fp, pmtl[i].nw_t.ifname);
+		}
+		FREE_MTLAN((void *)pmtl);
+	}
+#endif
+	fprintf(fp, "-I FORWARD 1 -j VPN6KS\n");
+}
+
+/* Recompute all units from configuration: stopping one tunnel must not remove
+ * another's protection. --noflush with a declared user chain replaces that
+ * chain atomically while retaining the rest of the filter table.
+ */
+void amvpn_refresh_ipv6_killswitch(void)
+{
+	char path[] = "/tmp/vpn6ks.XXXXXX";
+	int fd, lock, ret;
+	FILE *fp;
+
+	lock = file_lock("vpn6ks");
+	fd = mkstemp(path);
+	if (fd < 0) {
+		file_unlock(lock);
+		return;
+	}
+	fp = fdopen(fd, "w");
+	if (!fp) {
+		close(fd);
+		unlink(path);
+		file_unlock(lock);
+		return;
+	}
+	fprintf(fp, "*filter\n");
+	if (!eval("ip6tables", "-C", "FORWARD", "-j", "VPN6KS"))
+		fprintf(fp, "-D FORWARD -j VPN6KS\n");
+	amvpn_write_ipv6_killswitch(fp);
+	fprintf(fp, "COMMIT\n");
+	ret = ferror(fp);
+	if (fclose(fp))
+		ret = 1;
+	if (ret || eval("ip6tables-restore", "--noflush", path))
+		logmessage("vpndirector", "Failed to update IPv6 kill switch");
+	unlink(path);
+	file_unlock(lock);
+}
+#endif
+
+
 /* Will remove all rules for a specific unit
    Will also remove all rules for a specific SDN interface,
    or search for any SDN that is tied to specified unit and remove
@@ -871,6 +1037,53 @@ void amvpn_clear_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifna
 }
 
 
+#ifdef RTCONFIG_SOC_IPQ53XX
+/* Keep the same selectors as the Director rule, including destination-only and
+ * catch-all policies. An omitted selector means all, just as in routing rules.
+ */
+static void amvpn_add_policy_killswitch(char *src, char *dst, char *prio)
+{
+	char *destination = (*dst && strcmp(dst, "0.0.0.0")) ? dst : "all";
+#ifdef RTCONFIG_MULTILAN_CFG
+	MTLAN_T *pmtl;
+	size_t mtl_sz = 0;
+	int i, j;
+#endif
+
+	if (*src && strcmp(src, "0.0.0.0") && strcmp(src, "0.0.0.0/0")) {
+		eval("ip", "rule", "add", "from", src, "to", destination,
+		     "priority", prio, "prohibit");
+		return;
+	}
+
+	/* Wildcard source policies protect forwarded LAN traffic. Blocking locally
+	 * originated traffic here would prevent the tunnel from reconnecting.
+	 */
+	eval("ip", "rule", "add", "iif", nvram_safe_get("lan_ifname"),
+	     "to", destination, "priority", prio, "prohibit");
+#ifdef RTCONFIG_MULTILAN_CFG
+	pmtl = (MTLAN_T *)INIT_MTLAN(sizeof(MTLAN_T));
+	if (pmtl) {
+		get_mtlan(pmtl, &mtl_sz);
+		for (i = 1; i < mtl_sz; ++i) {
+			if (!pmtl[i].enable || !*pmtl[i].nw_t.ifname ||
+			    !strcmp(pmtl[i].nw_t.ifname, nvram_safe_get("lan_ifname")))
+				continue;
+			for (j = 1; j < i; ++j)
+				if (pmtl[j].enable && !strcmp(pmtl[j].nw_t.ifname, pmtl[i].nw_t.ifname))
+					break;
+			if (j < i)
+				continue;
+			eval("ip", "rule", "add", "iif", pmtl[i].nw_t.ifname,
+			     "to", destination, "priority", prio, "prohibit");
+		}
+		FREE_MTLAN((void *)pmtl);
+	}
+#endif
+}
+
+#endif
+
 void amvpn_set_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifname) {
 	char buffer[8000], prefix[32], prio_str[6];
 	char *buffer_tmp, *buffer_tmp2, *rule;
@@ -883,6 +1096,10 @@ void amvpn_set_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifname
 #endif
 #ifdef RTCONFIG_WIREGUARD
 	int enabled;
+#endif
+
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_IPV6)
+	amvpn_refresh_ipv6_killswitch();
 #endif
 
 	if (proto == VPNDIR_PROTO_OPENVPN) {
@@ -918,9 +1135,15 @@ void amvpn_set_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifname
 				if (!strcmp(target,"WAN"))
 					continue;
 
+#ifdef RTCONFIG_SOC_IPQ53XX
+				if (!strncmp(target, "OVPN", 4)) {
+					// Create deny rule
+					amvpn_add_policy_killswitch(src, dst, prio_str);
+#else
 				if (!strncmp(target, "OVPN", 4) && *src && strcmp(src, "0.0.0.0")) {
 					// Create deny rule
 					eval("ip", "rule", "add", "from", src, "priority", prio_str, "prohibit");
+#endif
 					if (verb > 3)
 						logmessage("openvpn-routing","Setting killswitch rule for %s", src);
 				}
@@ -982,9 +1205,15 @@ void amvpn_set_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifname
 			if (!strcmp(target,"WAN"))
 				continue;
 
+#ifdef RTCONFIG_SOC_IPQ53XX
+			if (!strncmp(target, "WGC", 3)) {
+				// Create deny rule
+				amvpn_add_policy_killswitch(src, dst, prio_str);
+#else
 			if (!strncmp(target, "WGC", 3) && *src && strcmp(src, "0.0.0.0")) {
 				// Create deny rule
 				eval("ip", "rule", "add", "from", src, "priority", prio_str, "prohibit");
+#endif
 				if (verb > 3)
 					logmessage("openvpn-routing","Setting killswitch rule for %s", src);
 			}
