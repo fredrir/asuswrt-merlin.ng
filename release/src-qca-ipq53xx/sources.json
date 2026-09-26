@@ -68210,7 +68210,9 @@
     "release/src/router/libovpn/openvpn_control.h",
     "release/src/router/libovpn/openvpn_options.c",
     "release/src/router/libovpn/openvpn_setup.c",
-    "release/src/router/shared/scripts.c"
+    "release/src/router/shared/scripts.c",
+    "release/src/router/rc/openvpn.c",
+    "release/src/router/rc/wireguard.c"
   ],
   "overlay_files": [
     "release/src/asustools/mktail",
@@ -75936,7 +75938,6 @@
     "release/src/router/rc/nbr_monitor.c",
     "release/src/router/rc/netool.h",
     "release/src/router/rc/ntp.c",
-    "release/src/router/rc/openvpn.c",
     "release/src/router/rc/ovpn-accounts.c",
     "release/src/router/rc/ovpn.c",
     "release/src/router/rc/pc.c",
@@ -76025,7 +76026,6 @@
     "release/src/router/rc/wan.c",
     "release/src/router/rc/wanduck.c",
     "release/src/router/rc/watchdog.c",
-    "release/src/router/rc/wireguard.c",
     "release/src/router/rc/wireless.c",
     "release/src/router/rom/9873w_b0-b4.bin",
     "release/src/router/rom/Makefile",

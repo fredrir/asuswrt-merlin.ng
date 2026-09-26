@@ -32,6 +32,7 @@ def main():
         parser.error('Missing candidate: ' + str(args.candidate))
     cases = {
         'basic': [('config', 'run-vpn-config-test.sh', [], 'basic'),
+                  ('ovpn-wrappers', 'run-ovpn-wrappers-test.sh', [], 'basic'),
                   ('wg-import', 'run-wg-import-test.sh', [], 'basic')],
         'network': [('network', 'run-vpn-network-test.sh', [], 'net'),
                     ('wg-export', 'run-wg-export-test.sh', [], 'net'),

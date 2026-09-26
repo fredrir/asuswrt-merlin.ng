@@ -4,8 +4,8 @@ This branch makes the RT-BE90U firmware build from checked-out repository
 sources. It is based on `master-3006` at
 `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`. It imports the previously tested
 dev14 port (`0dd6c693e2f12bebde29d38b1cd6b0934cce5cad`) and labels this first
-native build `58138-rtbe90u-dev15-vpn`. The current dev16 candidate consolidates
-VPN and script-hook code into the shared 3006 source tree.
+native build `58138-rtbe90u-dev15-vpn`. The current dev17 candidate consolidates
+VPN, rc wrapper and script-hook code into the shared 3006 source tree.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -15,9 +15,9 @@ validation have not been performed; the image is not ready to flash.
 
 | Location | Build role and provenance |
 | --- | --- |
-| `release/src/` | 68,208 common inputs, including nine consolidated VPN/script-hook files |
+| `release/src/` | 68,210 common inputs, including eleven consolidated VPN/script-hook files |
 | `release/src-qca-ipq53xx/linux`, `ipq53xx`, and other platform directories | 68,029 vendor platform inputs from ASUS GPL TUF-BE9400 3.0.0.6.102.58138 |
-| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,914 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
+| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,912 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
 | `release/src-qca-ipq53xx/vendor/` | SDK build glue and auxiliary sources needed to reconstruct the SDK layout |
 | `release/src-qca-ipq53xx/sources.json` | Explicit common/override/platform file lists, SDK aliases, required empty directories and import provenance |
 | `tools/rt-be90u/` | Source assembly, builder provisioning, image/linkage checks and offline runtime fixtures |
@@ -136,14 +136,14 @@ sparse checkout of the required source trees and does not retain credentials.
 The job provisions Ubuntu build packages from scratch, checks out the pinned
 QCA toolchain revision and builds with Docker networking disabled. It rejects
 an existing build directory or collected image, and uses no source/build cache.
-It runs helper tests, 1,152 common-source comparisons, native input checks,
+It runs helper tests, 2,144 common-source comparisons, 32 invalid-profile rejections, native input checks,
 uImage identity/CRC/size checks, extracted rc/httpd/OpenVPN linkage checks and
 the source-compiled script/config/event fixture. The full QEMU VPN, browser,
 Entware and hardware suites remain separate from this initial CI job.
 
 The common-source checker normally requires local baseline objects. In shallow
 CI clones, `--fetch-baselines` explicitly fetches the two recorded commits and
-their eighteen relevant blobs before running the comparisons without lazy
+their twenty-two relevant blobs before running the comparisons without lazy
 fetching. This is test provisioning; the firmware build still consumes only
 checked-out inputs.
 
@@ -231,8 +231,8 @@ integer placeholder from a parser log message that had only one argument.
 python3 tools/rt-be90u/check-common-sources.py
 ```
 
-This check needs the recorded baseline Git objects and a C preprocessor. It
-compares the nine files across 128 architecture/feature profiles each (1,152
+This check needs the recorded baseline Git objects and a C preprocessor. At
+dev16 it compared nine files across 128 architecture/feature profiles each (1,152
 comparisons), including IPv6, WireGuard, multi-LAN and automatic-WAN variants.
 IPQ53xx must match the validated dev15 port; other profiles must match upstream
 apart from the documented diagnostic fix. Includes are removed for this check:
@@ -285,3 +285,20 @@ checkouts: archiving the commit with a path filter requested an unrelated absent
 blob. Provisioning now archives only the pinned package subtree. This passed
 with that unrelated blob still absent; all 3,714 entries match the prior export
 in names, types, executable modes, symlink targets and file contents.
+
+## Dev17 rc wrapper consolidation
+
+`rc/openvpn.c` and `rc/wireguard.c` now use the common source tree; both overlay
+copies are removed. IPQ53xx keeps its externally emitted OpenVPN wrappers,
+explicit-zero WireGuard keepalive, server-address host-route fallback and IPv6
+guard refresh calls. Other platform profiles retain their prior source tokens.
+The common-source check now covers eleven files: 2,144 valid comparisons and
+32 rejected QCA profiles that omit the required Merlin VPN configuration.
+
+A new ARM fixture links the firmware build's actual `rc/openvpn.o`. It checks
+all six exported wrappers, event dispatch, DNS/SDN callback ordering and invalid
+arguments using recorded service stubs. It passes against preserved dev16 and
+is part of the offline basic suite for dev17. It does not exercise complete rc
+service orchestration. The broader offline suite checks WireGuard import/export,
+keepalive and encrypted tunnels, four OpenVPN tunnel modes, policy routing and
+IPv6 blocking. These runtime suites remain separate from hosted build CI.

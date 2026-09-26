@@ -4,7 +4,7 @@
 This checks selected C tokens across feature profiles, with includes removed.
 It does not type-check headers or replace a complete other-model firmware build.
 Checks run without lazy fetching. --fetch-baselines explicitly provisions the
-two baseline commits and the eighteen source blobs first, for shallow CI clones.
+two baseline commits and the selected source blobs first, for shallow CI clones.
 """
 import argparse
 import hashlib
@@ -18,8 +18,10 @@ import subprocess
 FILES = ['release/src/router/libovpn/' + name for name in (
     'amvpn_routing.c', 'amvpn_routing.h', 'openvpn_config.c', 'openvpn_config.h',
     'openvpn_control.c', 'openvpn_control.h', 'openvpn_options.c', 'openvpn_setup.c',
-)] + ['release/src/router/shared/scripts.c']
+)] + ['release/src/router/shared/scripts.c',
+      'release/src/router/rc/openvpn.c', 'release/src/router/rc/wireguard.c']
 FEATURES = ('RTCONFIG_IPV6', 'RTCONFIG_MULTILAN_CFG', 'RTCONFIG_WIREGUARD', 'RTCONFIG_AUTO_WANPORT')
+RC_FEATURES = ('RTCONFIG_VPN_FUSION', 'RTCONFIG_VPN_FUSION_MERLIN')
 PLATFORMS = {
     'generic': [],
     'bcm-hnd': ['RTCONFIG_BCMARM', 'HND_ROUTER', 'RTCONFIG_HND_ROUTER'],
@@ -39,11 +41,16 @@ def git_source(repo, revision, name, fetch=False):
         env=dict(os.environ, GIT_NO_LAZY_FETCH='0' if fetch else '1'), text=True)
 
 
-def tokens(source, definitions, compiler):
+def preprocess(source, definitions, compiler):
     source = re.sub(r'^\s*#\s*include\b[^\n]*', '', source, flags=re.M)
     command = [compiler, '-E', '-P', '-undef', '-nostdinc', '-x', 'c', '-', '-D__LINE__=0']
     command += ['-D' + name + '=1' for name in definitions]
-    result = subprocess.run(command, input=source, text=True, capture_output=True, check=True)
+    return subprocess.run(command, input=source, text=True, capture_output=True)
+
+
+def tokens(source, definitions, compiler):
+    result = preprocess(source, definitions, compiler)
+    result.check_returncode()
     return TOKEN.findall(result.stdout)
 
 
@@ -82,17 +89,32 @@ def main():
         qca = git_source(repo, args.qca_base, 'release/src-qca-ipq53xx/source-overlay/' + name)
         current = (repo / name).read_text()
         checks = 0
+        rejected = 0
+        features = FEATURES + (RC_FEATURES if '/rc/' in name else ())
         for platform, definitions in PLATFORMS.items():
-            for flags in itertools.product((False, True), repeat=len(FEATURES)):
-                selected = definitions + [name for name, enabled in zip(FEATURES, flags) if enabled]
+            for flags in itertools.product((False, True), repeat=len(features)):
+                selected = definitions + [name for name, enabled in zip(features, flags) if enabled]
                 expected = qca if platform == 'ipq53xx' else upstream
+                if (name.endswith('/rc/openvpn.c') and platform == 'ipq53xx'
+                        and 'RTCONFIG_VPN_FUSION_MERLIN' not in selected):
+                    diagnostic = '#error "RT-BE90U VPN variant requires RTCONFIG_VPN_FUSION_MERLIN"'
+                    for source in (current, expected):
+                        result = preprocess(source, selected, args.compiler)
+                        errors = [line.split('error: ', 1)[1] for line in result.stderr.splitlines()
+                                  if 'error: ' in line]
+                        if not result.returncode or errors != [diagnostic]:
+                            raise ValueError('Expected the IPQ53xx Merlin-VPN configuration guard')
+                    rejected += 1
+                    continue
                 if tokens(current, selected, args.compiler) != tokens(expected, selected, args.compiler):
                     raise ValueError('Conditional code differs: %s (%s)' % (name, ','.join(selected) or 'generic'))
                 checks += 1
         results.append({'file': name, 'profiles_checked': checks,
+                        'invalid_profiles_rejected': rejected,
                         'upstream_sha256': original_hash, 'upstream_adjustments': adjustments})
     print(json.dumps({'base': args.base, 'qca_base': args.qca_base,
                       'files': results, 'comparisons_passed': sum(r['profiles_checked'] for r in results),
+                      'invalid_profiles_rejected': sum(r['invalid_profiles_rejected'] for r in results),
                       'scope': 'C tokens with includes removed; not a full other-model compile'}, indent=2))
 
 
