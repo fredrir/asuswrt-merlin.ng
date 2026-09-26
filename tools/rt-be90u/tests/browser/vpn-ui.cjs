@@ -45,6 +45,11 @@ const paths = [
       const denied = await context.request.get(`/client${unit}.ovpn`);
       assert(!(await denied.text()).includes('RTBE90U_EXPORT_FIXTURE_'), 'Unauthenticated export disclosed a profile');
     }
+    for (const name of ['wgs_client.conf', 'wgs_client.png']) {
+      const denied = await context.request.get('/' + name);
+      assert(!(await denied.body()).includes(Buffer.from('RTBE90U_WG_PRIVATE_FIXTURE_')),
+        'Unauthenticated WireGuard export disclosed private profile data: ' + name);
+    }
     const login = await context.request.post('/login.cgi', {
       headers: { Referer: baseURL + '/Main_Login.asp' },
       form: {
@@ -314,11 +319,80 @@ const paths = [
     assert(await page.locator('[name="wgc_enforce"][value="1"]').isChecked());
     console.log('PASS WireGuard client description and enforcement setting');
 
+    async function selectWg(name, unit) {
+      if (await field(name).inputValue() === unit) return;
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'load' }),
+        field(name).selectOption(unit)
+      ]);
+      await ready();
+      await value(name, unit);
+    }
+    await selectWg('wgc_unit', '2');
+    const wgPrivate = Buffer.alloc(32, 7).toString('base64');
+    const wgPublic = Buffer.alloc(32, 9).toString('base64');
+    const wgPsk = Buffer.alloc(32, 11).toString('base64');
+    const wgConfig = `[Interface]\nPrivateKey = ${wgPrivate}\nAddress = 10.77.2.2/32\n` +
+      `DNS = 10.77.2.1\nMTU = 1380\n[Peer]\nPublicKey = ${wgPublic}\nPresharedKey = ${wgPsk}\n` +
+      'AllowedIPs = 0.0.0.0/0,::/0\nEndpoint = [2001:db8::77]:51822\nPersistentKeepalive = 25\n';
+    await page.locator('#wgfile').setInputFiles({
+      name: 'fixture.conf', mimeType: 'text/plain', buffer: Buffer.from(wgConfig)
+    });
+    const imported = page.waitForResponse(response => response.url().endsWith('/upload_wgc_config.cgi'));
+    await page.locator('[onclick="Importwg();"]').click();
+    const importedResponse = await imported;
+    assert.equal(importedResponse.status(), 200);
+    await importedResponse.finished();
+    await reopen();
+    for (const [name, expected] of Object.entries({
+      wgc_priv: wgPrivate, wgc_ppub: wgPublic, wgc_psk: wgPsk,
+      wgc_addr: '10.77.2.2/32', wgc_dns: '10.77.2.1', wgc_mtu: '1380',
+      wgc_aips: '0.0.0.0/0,::/0', wgc_ep_addr: '2001:db8::77', wgc_ep_port: '51822', wgc_alive: '25'
+    })) await value(name, expected);
+    await selectWg('wgc_unit', '1');
+    await value('wgc_desc', 'Fixture WG client');
+    assert.notEqual(await field('wgc_priv').inputValue(), wgPrivate, 'Import changed another client profile');
+    console.log('PASS WireGuard profile import, IPv6 endpoint, keys and client-unit isolation');
+
     await open(paths[4]);
     await field('wgs_port').fill('51821');
     await apply();
     await value('wgs_port', '51821');
     console.log('PASS WireGuard server port');
+    for (const unit of ['1', '2']) {
+      await selectWg('wgsc_unit', unit);
+      await page.locator('[name="wgsc_enable"][value="1"]').check();
+      for (const [name, value] of Object.entries({
+        wgsc_name: `Fixture peer ${unit}`, wgsc_addr: `10.88.0.${unit}/32`,
+        wgsc_aips: `10.88.0.${unit}/32`, wgsc_caips: unit === '1' ? '0.0.0.0/0' : '192.0.2.0/24'
+      })) await field(name).fill(value);
+      await apply();
+    }
+    await selectWg('wgsc_unit', '1');
+    await value('wgsc_name', 'Fixture peer 1');
+    await value('wgsc_addr', '10.88.0.1/32');
+    await value('wgsc_caips', '0.0.0.0/0');
+    await page.locator('[name="wgsc_enable"][value="0"]').check();
+    await apply();
+    assert(await page.locator('[name="wgsc_enable"][value="0"]').isChecked());
+    await selectWg('wgsc_unit', '2');
+    await value('wgsc_name', 'Fixture peer 2');
+    await value('wgsc_addr', '10.88.0.2/32');
+    await value('wgsc_caips', '192.0.2.0/24');
+    assert(await page.locator('[name="wgsc_enable"][value="1"]').isChecked());
+    console.log('PASS WireGuard peer editing, disable and server-peer isolation');
+    for (const unit of ['1', '2']) {
+      await selectWg('wgsc_unit', unit);
+      const downloaded = page.waitForEvent('download');
+      await page.locator('[onclick="exportConfig();"]').evaluate(button => button.click());
+      const download = await downloaded;
+      assert.equal(download.suggestedFilename(), 'wgs_client.conf');
+      assert.equal(readFileSync(await download.path(), 'utf8'), `RTBE90U_WG_PRIVATE_FIXTURE_${unit}\n`);
+      const qr = await context.request.get('/wgs_client.png');
+      assert.equal(qr.status(), 200);
+      assert((await qr.body()).includes(Buffer.from(`RTBE90U_WG_PRIVATE_FIXTURE_${unit}`)));
+    }
+    console.log('PASS authenticated WireGuard configuration/QR exports select the correct peer');
     healthy();
   } finally {
     if (browser) await browser.close();

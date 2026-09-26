@@ -84,7 +84,7 @@
 +++ b/release/src/router/extendno.conf
 @@ -1 +1 @@
 -EXTENDNO=58138-rtbe90u-dev1
-+EXTENDNO=58138-rtbe90u-dev9-vpn
++EXTENDNO=58138-rtbe90u-dev10-vpn
 --- a/release/src/router/httpd/Makefile
 +++ b/release/src/router/httpd/Makefile
 @@ -240,8 +240,8 @@
@@ -1765,3 +1765,14 @@
  else
  	rm -rf $(INSTALLDIR)/www/ajax_openvpn_server.asp
  	rm -rf $(INSTALLDIR)/www/Advanced_VPN_OpenVPN.asp
+--- a/release/src/router/httpd/web.c
++++ b/release/src/router/httpd/web.c
+@@ -28206,7 +28206,7 @@
+ 	{ "captcha.gif", "image/gif", no_cache_IE7, NULL, do_captcha_file, NULL },
+ #endif
+ #ifdef RTCONFIG_WIREGUARD
+-	{ "wgs_client.png", "image/png", no_cache_IE7, NULL, do_wgs_client_png, NULL },
++	{ "wgs_client.png", "image/png", no_cache_IE7, NULL, do_wgs_client_png, do_auth },
+ 	{ "wgs_client.conf", "application/octet-stream", NULL, NULL, do_wgs_client_conf, do_auth },
+ 	{ "upload_wgc_config.cgi*", "text/html", no_cache_IE7, do_upload_wgc_config_post, do_upload_wgc_config_cgi, do_auth },
+ #endif

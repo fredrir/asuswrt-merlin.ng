@@ -1,9 +1,9 @@
 # RT-BE90U port
 
-The latest checkpoint is `dev9-vpn` (2026-09-26). It fixes both OpenVPN server
-Export buttons by packaging the numbered profile links requested by the UI.
-It retains dev8's OpenVPN 2.6.16 update and fixes for policy gateway initialization,
-missing-gateway WAN escape and static-key cipher selection. The packaged image passes actual encrypted OpenVPN forwarding,
+The latest checkpoint is `dev10-vpn` (2026-09-26). It requires authentication for
+WireGuard QR exports, which contain peer configuration/private-key material.
+It retains dev9's OpenVPN download fixes and dev8's OpenVPN 2.6.16 update,
+policy gateway, missing-gateway WAN escape and static-key cipher fixes. The packaged image passes actual encrypted OpenVPN forwarding,
 disconnect blocking, restart and TLS identity-rejection tests in isolated containers.
 IPv4 policy/DNS, browser and Entware fixtures also pass. It is **not ready to flash**:
 IPv6 bypasses the imported IPv4 kill switches, and router service integration,
@@ -12,7 +12,7 @@ See [recovery readiness](rt-be90u-recovery.md) before planning a hardware test.
 
 | Name | Value |
 | --- | --- |
-| Status | Experimental dev9 VPN image built and tested offline; IPv6 policy protection and full Merlin integration unfinished; nothing flashed |
+| Status | Experimental dev10 VPN image built and tested offline; IPv6 policy protection and full Merlin integration unfinished; nothing flashed |
 | Requested scope | JFFS scripts, Entware, custom service configuration, VPN/DNS/network controls, broad Merlin compatibility |
 | Hardware inspected | 2026-09-25, stock firmware over SSH |
 | `productid` | `TUF-BE9400` |
@@ -175,7 +175,7 @@ Patches apply only to the verified Qualcomm GPL archive. Existing Broadcom sourc
 | Enable switch | Administration → System → Enable JFFS custom scripts and configs |
 | Default | Disabled; an absent `jffs2_scripts` setting also disables execution |
 | Persistent directories | `/jffs/scripts`, `/jffs/configs`, `/jffs/addons`; initialized through the Qualcomm UBIFS path |
-| Script API | Merlin names, argument order, blocking timeouts and background execution conventions; dev9 ARM shared-library execution through real Entware rc.unslung tested below |
+| Script API | Merlin names, argument order, blocking timeouts and background execution conventions; dev10 ARM shared-library execution through real Entware rc.unslung tested below |
 | Service events | `init-start`, `services-start`, `services-stop`, `service-event`, `service-event-end` |
 | Network events | `wan-event`, `wan-start`, `firewall-start`, `nat-start`, `dhcpc-event`, `zcip-event` |
 | Storage events | `pre-mount`, `post-mount`, `unmount` |
@@ -247,9 +247,9 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Status | Build and offline testing only; not ready to flash |
 | Preparation | `tools/rt-be90u/prepare-vpn.sh`; separate from the default extension patch series |
 | Imported source | Pinned Git objects listed in `vpn/imports.json`; working-tree edits are ignored |
-| Version | `58138-rtbe90u-dev9-vpn` |
-| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev9-vpn.trx`; 59,046,137 bytes |
-| SHA-256 | `3a5bf68ade4c3f271a3932ff86ecfe95a83ddfe1f45cf2e0d7b2f5b9e2522183` |
+| Version | `58138-rtbe90u-dev10-vpn` |
+| Image | `TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev10-vpn.trx`; 59,046,189 bytes |
+| SHA-256 | `c4099ec3de4b70b0e6efb57090f924bc5da3335e826ca11fba4e16064cd7082c` |
 | Superseded build | `dev2-vpn` omitted `RTCONFIG_VPN_FUSION_MERLIN` because the SDK selected a different target file; its library tests did not establish the routing build configuration |
 | Configuration guard | Both target files enable Merlin VPN integration; compilation and ARM tests reject configurations without that switch |
 | Saved artifact | Local `tools/rt-be90u/artifacts/`; excluded from Git |
@@ -261,14 +261,14 @@ docker run --rm --network none --read-only --tmpfs /tmp:exec --tmpfs /jffs \
 | Custom configuration | Reads legacy ASUS NVRAM settings until a file-backed configuration is saved; clearing that file does not revive old settings |
 | ARM execution test | Target image library under QEMU; credentials, custom settings, key storage/reset, VPNDirector storage/filtering and route-command generation pass; NVRAM and command execution are stubbed |
 | Source integrity | All 599 pre-build inputs match independent fresh preparation; 594 remain identical after compilation, with five expected Autotools-generated Makefiles separately accounted for |
-| Build | Incremental build in a separate copy of completed dev8; only version and www Makefile inputs changed; `make` exit 0; independent fresh preparation in `experimental-vpn-dev9-final-repro-58138` |
+| Build | Incremental build in a separate copy of completed dev9; only version and HTTP handler inputs changed; `make` exit 0; independent fresh preparation in `experimental-vpn-dev10-final-repro-58138` |
 | Compiled configuration | Merlin VPN enabled in `.config` and `shared/rtconfig.h`; legacy VPN entry point linked; ECM selector returns disabled; `rc` is byte-identical to the previously inspected `dev4-vpn` binary |
 | Regression checks | ARM test rejects `dev2-vpn`; browser tests reproduce `dev3-vpn` UI/save failures and `dev4-vpn` extra-certificate loss |
 | Browser fixes | Import VPN Director icons and retain them during packaging; add Merlin name validation; process generic VPN settings after their profile selectors |
 | Certificate fixes | Save extra certificates and submitted generic-key values; read and accept up to 7,999 bytes; reject oversized indexed and generic submissions |
 | Browser result | Six pages/tabs, VPN Director CRUD, OpenVPN settings, certificates, long chains, profile import/isolation and WireGuard settings pass against the extracted final image |
 | Artifact checks | Both CRCs valid; fits observed UBI volume; `rc`, HTTP and OpenVPN linkage passes; 792 runtime ELFs are AArch64; 11 coprocessor ELFs unchanged; SquashFS offset 4323076 |
-| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev9-58138` and `image-audit-vpn-dev9` on `archie`; results in `logs/vpn-dev9-*` |
+| Build and audit location | `~/projects/rt-be90u-port/experimental-vpn-dev10-58138` and `image-audit-vpn-dev10` on `archie`; results in `logs/vpn-dev10-*` |
 | Current-router migration | Read-only inspection found no Fusion profiles, device policies, default VPN or SDN VPN assignments; no VPN assignments need conversion on this router |
 | Encrypted OpenVPN | Generated static/TLS/tls-crypt/tls-crypt-v2 configurations, LAN forwarding, transport ciphertext, disconnect blocking, restart and wrong-server rejection pass |
 | Remaining work | Encrypted WireGuard and full router service lifecycle; IPv6 policy protection; general stock VPN Fusion/SDN migration; add-on APIs; remaining UI paths; recovery and hardware validation |
@@ -297,8 +297,8 @@ docker run --rm --network none --read-only --ulimit core=0 --tmpfs /tmp:exec,siz
 
 ## VPN browser tests
 
-The expanded suite passed on the final extracted dev9 image using local Chromium on
-Arch Linux. Evidence: `logs/vpn-dev9-browser.log` and `logs/vpn-dev9-httpd.log`.
+The expanded suite passed on the final extracted dev10 image using local Chromium on
+Arch Linux. Evidence: `logs/vpn-dev10-browser.log` and `logs/vpn-dev10-httpd.log`.
 It now also verifies both server Export handlers, exact profile bytes, filenames,
 server-unit selection and unauthenticated blocking using synthetic profile files.
 The table below retains the earlier dev5 test provenance.
@@ -350,7 +350,7 @@ docker network rm rt-be90u-http-test
 ## Entware binary compatibility
 
 The original dev5 execution fixture remains available. The separate complete
-installation fixture and its dev9 results are documented below.
+installation fixture and its dev10 results are documented below.
 
 | Name | Value |
 | --- | --- |
@@ -431,7 +431,7 @@ The fixture refuses existing network interfaces; do not use host networking.
 Docker removes all test links/rules with the container. No host routes, router
 configuration or unrelated containers are modified.
 
-Final dev9 evidence on `archie`: `logs/vpn-dev9-network.log`. Earlier regressions:
+Final dev10 evidence on `archie`: `logs/vpn-dev10-network.log`. Earlier regressions:
 `logs/network-dev6/dev5-regression.log`, `logs/vpn-dev5-wg-network-regression.log`.
 The failed intermediate wildcard implementation is retained in
 `logs/network-dev6/reconnect-regression.log`; it was corrected before packaging.
@@ -465,8 +465,8 @@ stops it in reverse service order. The harness verifies the daemon's readiness
 PID and running state before stopping it, then verifies termination and retained
 storage files. No live USB device is mounted or formatted.
 
-All assertions and explicit post-install scripts pass on dev9. Evidence:
-`logs/vpn-dev9-entware-install.log`. Real USB mounting, power/reboot persistence,
+All assertions and explicit post-install scripts pass on dev10. Evidence:
+`logs/vpn-dev10-entware-install.log`. Real USB mounting, power/reboot persistence,
 hotplug order, `rc.func` daemon handling and third-party add-ons remain untested.
 The user confirmed physical access, Ethernet and spare 8 GB/16 GB USB drives.
 Only Linux and macOS recovery computers are available. Neither drive has been
@@ -536,9 +536,9 @@ These tests do not run the router's kernel, full rc service orchestration, DNS
 proxy restart, real USB, acceleration or encrypted WireGuard datapath. Those
 limits, IPv6 VPN protection and hardware validation remain explicit release gaps.
 
-All four modes pass against the extracted final dev9 image. Evidence:
-`logs/vpn-dev9-tunnel-static.log`, `logs/vpn-dev9-tunnel-tls.log`,
-`logs/vpn-dev9-tunnel-tls-crypt.log`, and `logs/vpn-dev9-tunnel-tls-crypt-v2.log`.
+All four modes pass against the extracted final dev10 image. Evidence:
+`logs/vpn-dev10-tunnel-static.log`, `logs/vpn-dev10-tunnel-tls.log`,
+`logs/vpn-dev10-tunnel-tls-crypt.log`, and `logs/vpn-dev10-tunnel-tls-crypt-v2.log`.
 The packaged `libovpn.so` SHA-256 is
 `4f64ac512cf0803ff6ba3e7631e3cee6346c91f9d82a054771b1c141daf9d845`;
 OpenVPN's is `a70908279b35b2c5447c9ed734c8877d645779e1b2b4d7cab7464d5b956078ad`.
@@ -562,3 +562,23 @@ including all three exported-profile modes in the tunnel logs above.
 The user requested continued offline work on 2026-09-26 because other processes
 cannot be interrupted until the following morning. Recovery/hardware actions
 remain unapproved; the passage of time does not authorize them.
+
+## WireGuard browser coverage and QR authentication
+
+The final dev10 browser fixture passes valid client imports with private/public/
+preshared keys, an IPv6 endpoint, AllowedIPs, DNS, MTU and keepalive, while
+preserving other client profiles. Server peer editing, disable and unit isolation
+also pass. Authenticated configuration and QR downloads select the correct peer.
+Synthetic per-peer files stand in for rc-generated export artifacts; these tests
+do not establish key generation, QR encoding correctness or encrypted WG traffic.
+
+The GPL HTTP table inherited into dev9 protected `wgs_client.conf` but left
+`wgs_client.png` without authentication. The server creates those QR images from
+peer configurations containing private keys. The isolated dev9 regression exposed
+a synthetic PNG marker before login; the configuration marker stayed protected.
+Dev10 assigns the same authentication handler to both routes. The expanded suite
+rejects either marker before login and verifies both peer exports after login.
+Evidence: `logs/vpn-dev9-wg-qr-auth-regression.log` and the final dev10 browser log.
+This defect was reproduced only in the offline candidate fixture; installed stock
+58500 was not probed. Invalid/unsupported import handling still needs separate
+validation; a successful standard import does not establish failure atomicity.
