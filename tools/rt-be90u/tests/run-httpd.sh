@@ -26,6 +26,11 @@ from pathlib import Path
 for name in ('random', 'urandom'):
     (Path(sys.argv[1]) / 'dev' / name).write_bytes(os.urandom(1024 * 1024))
 (Path(sys.argv[1]) / 'proc/uptime').write_text(Path('/proc/uptime').read_text())
+for unit in (1, 2):
+    directory = Path(sys.argv[1]) / ('etc/openvpn/server%d' % unit)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / 'client.ovpn').write_text(
+        '# RTBE90U_EXPORT_FIXTURE_%d\nclient\nremote 192.0.2.%d 1194\n' % (unit, unit))
 
 settings = {
     'productid': 'TUF-BE9400', 'odmpid': 'RT-BE90U',

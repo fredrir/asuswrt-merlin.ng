@@ -41,6 +41,10 @@ const paths = [
     context.setDefaultNavigationTimeout(30000);
     const marker = await context.request.get('/Main_Login.asp');
     assert((await marker.text()).includes('RTBE90U_HTTPD_FIXTURE'), 'Refusing to modify a non-fixture server');
+    for (const unit of ['1', '2']) {
+      const denied = await context.request.get(`/client${unit}.ovpn`);
+      assert(!(await denied.text()).includes('RTBE90U_EXPORT_FIXTURE_'), 'Unauthenticated export disclosed a profile');
+    }
     const login = await context.request.post('/login.cgi', {
       headers: { Referer: baseURL + '/Main_Login.asp' },
       form: {
@@ -280,6 +284,26 @@ const paths = [
     assert.equal(await page.locator('#edit_vpn_crt_server_ca').inputValue(), chain);
     assert.equal(await page.locator('#edit_vpn_crt_server_extra').inputValue(), '');
     console.log('PASS OpenVPN server certificate editing and clearing');
+
+    for (const unit of ['1', '2']) {
+      if (await field('vpn_server_unit').inputValue() !== unit) {
+        await Promise.all([
+          page.waitForNavigation({ waitUntil: 'load' }),
+          field('vpn_server_unit').selectOption(unit)
+        ]);
+        await ready();
+      }
+      const downloaded = page.waitForEvent('download');
+      // Fixture files stand in for rc-generated profiles; rc is not running.
+      // Invoke the actual export handler even when its daemon-state UI is hidden.
+      await page.locator('#exportToLocal').evaluate(button => button.click());
+      const download = await downloaded;
+      assert.equal(download.suggestedFilename(), `client${unit}.ovpn`);
+      assert.equal(readFileSync(await download.path(), 'utf8'),
+        `# RTBE90U_EXPORT_FIXTURE_${unit}\nclient\nremote 192.0.2.${unit} 1194\n`);
+      healthy();
+    }
+    console.log('PASS OpenVPN server 1/2 export buttons, exact profile selection and unauthenticated blocking');
 
     await open(paths[3]);
     await page.locator('[name="wgc_enable"][value="0"]').check();
