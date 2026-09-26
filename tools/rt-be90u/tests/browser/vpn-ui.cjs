@@ -349,6 +349,27 @@ const paths = [
       wgc_addr: '10.77.2.2/32', wgc_dns: '10.77.2.1', wgc_mtu: '1380',
       wgc_aips: '0.0.0.0/0,::/0', wgc_ep_addr: '2001:db8::77', wgc_ep_port: '51822', wgc_alive: '25'
     })) await value(name, expected);
+    for (const [unit, config] of [
+      ['2', ''], ['2', '[Interface]\nPrivateKey\n'],
+      ['2', wgConfig + '\n[Peer]\nPublicKey = ' + wgPublic + '\n'],
+      ['2junk', wgConfig], ['6', wgConfig], ['', wgConfig]
+    ]) {
+      const rejected = await context.request.post('/upload_wgc_config.cgi', {
+        headers: { Referer: page.url() },
+        multipart: {
+          wgc_upload_unit: unit,
+          file: { name: 'rejected.conf', mimeType: 'text/plain', buffer: Buffer.from(config) }
+        }
+      });
+      assert.equal(rejected.status(), 200);
+      await reopen();
+      assert.equal(await page.evaluate(() => httpApi.nvramGet(['wgc_upload_state'], true).wgc_upload_state), 'err');
+      await value('wgc_priv', wgPrivate);
+      await value('wgc_ppub', wgPublic);
+      await value('wgc_addr', '10.77.2.2/32');
+      await value('wgc_aips', '0.0.0.0/0,::/0');
+    }
+    console.log('PASS rejected WireGuard imports preserve settings and HTTP remains available');
     await selectWg('wgc_unit', '1');
     await value('wgc_desc', 'Fixture WG client');
     assert.notEqual(await field('wgc_priv').inputValue(), wgPrivate, 'Import changed another client profile');

@@ -84,7 +84,7 @@
 +++ b/release/src/router/extendno.conf
 @@ -1 +1 @@
 -EXTENDNO=58138-rtbe90u-dev1
-+EXTENDNO=58138-rtbe90u-dev10-vpn
++EXTENDNO=58138-rtbe90u-dev11-vpn
 --- a/release/src/router/httpd/Makefile
 +++ b/release/src/router/httpd/Makefile
 @@ -240,8 +240,8 @@
@@ -1776,3 +1776,320 @@
  	{ "wgs_client.conf", "application/octet-stream", NULL, NULL, do_wgs_client_conf, do_auth },
  	{ "upload_wgc_config.cgi*", "text/html", no_cache_IE7, do_upload_wgc_config_post, do_upload_wgc_config_cgi, do_auth },
  #endif
+--- a/release/src/router/shared/vpn_utils.c
++++ b/release/src/router/shared/vpn_utils.c
+@@ -1,4 +1,6 @@
+ #include <stdio.h>
++#include <ctype.h>
++#include <arpa/inet.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <syslog.h>
+@@ -294,119 +296,174 @@
+ #endif
+ 
+ #if defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_WIREGUARD) || defined(RTCONFIG_NORDVPN)
+-static char* _get_wgconf_val(char* buf)
+-{
+-	char *p = buf;
+-	int i = 0, len = 0, j = 0;
+-
+-	if (!buf)
+-		return p;
+-	if ((p = strchr(buf, '='))) p++;
+-
+-	len = strlen(p);
+-	for (i = 0; i < len; i++)
+-	{
+-		if (p[i] == ' ' || p[i] == '\r' || p[i] == '\n')
+-		{
+-			for(j = i; j < len; j++)
+-			{
+-				p[j] = p[j+1];
+-			}
+-			len--;
+-		}
+-	}
+-	return p;
+-}
+-
+-int read_wgc_config_file(const char* file_path, int wgc_unit)
+-{
+-	char wgc_prefix[8] = {0};
++/* Validate the complete single-peer profile before changing any NVRAM. */
++static int wgconf_number(const char *value, unsigned long max)
++{
++	char *end;
++	unsigned long number;
++	if (!value[0] || strspn(value, "0123456789") != strlen(value))
++		return 0;
++	number = strtoul(value, &end, 10);
++	return !*end && number <= max;
++}
++
++static int wgconf_key(const char *value)
++{
++	const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++	const char *last;
++	int i;
++	if (strlen(value) != 44 || value[43] != '=')
++		return 0;
++	for (i = 0; i < 43; i++)
++		if (!strchr(alphabet, value[i])) return 0;
++	last = strchr(alphabet, value[42]);
++	return last && ((last - alphabet) & 3) == 0;
++}
++
++static int wgconf_host(const char *value)
++{
++	unsigned char address[16];
++	size_t len = strlen(value);
++	if (inet_pton(AF_INET, value, address) == 1 || inet_pton(AF_INET6, value, address) == 1)
++		return 1;
++	return len && len <= 253 && value[0] != '.' && value[0] != '-'
++		&& !strstr(value, "..")
++		&& strspn(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.") == len;
++}
++
++static int wgconf_list(const char *value, int dns)
++{
++	char *copy, *cursor, *item, *mask;
++	unsigned char address[16];
++	int bits, valid = 1;
++	if (!(copy = strdup(value))) return 0;
++	cursor = copy;
++	while ((item = strsep(&cursor, ","))) {
++		if (dns) {
++			if (!wgconf_host(item)) { valid = 0; break; }
++			continue;
++		}
++		mask = strchr(item, '/');
++		if (mask) *mask++ = '\0';
++		bits = inet_pton(AF_INET, item, address) == 1 ? 32 :
++			(inet_pton(AF_INET6, item, address) == 1 ? 128 : 0);
++		if (!bits || (mask && !wgconf_number(mask, bits))) { valid = 0; break; }
++	}
++	free(copy);
++	return valid;
++}
++
++int read_wgc_config_file(const char *file_path, int wgc_unit)
++{
++	char prefix[8], priv[45] = "", pub[45] = "", psk[45] = "";
++	char addr[64] = "", dns[128] = "", mtu[6] = "", allowed[4096] = "";
++	char endpoint[264] = "", alive[6] = "";
++	struct {
++		const char *name, *nvname;
++		char *value;
++		size_t capacity;
++		int section, multiple, seen;
++	} fields[] = {
++		{ "PrivateKey", "priv", priv, sizeof(priv), 1, 0, 0 },
++		{ "Address", "addr", addr, sizeof(addr), 1, 1, 0 },
++		{ "DNS", "dns", dns, sizeof(dns), 1, 1, 0 },
++		{ "MTU", "mtu", mtu, sizeof(mtu), 1, 0, 0 },
++		{ "PublicKey", "ppub", pub, sizeof(pub), 2, 0, 0 },
++		{ "PresharedKey", "psk", psk, sizeof(psk), 2, 0, 0 },
++		{ "AllowedIPs", "aips", allowed, sizeof(allowed), 2, 1, 0 },
++		{ "Endpoint", NULL, endpoint, sizeof(endpoint), 2, 0, 0 },
++		{ "PersistentKeepalive", "alive", alive, sizeof(alive), 2, 0, 0 },
++	};
+ 	FILE *fp;
+-	char buf[256] = {0};
+-	char allowedips[4096] = {0};
+-	char dns[128] = {0};
+-	char addresses[64] = {0};
+-
+-	if (!file_path || file_path[0] == '\0')
++	long length;
++	char *data = NULL, *cursor, *line, *value, *read, *write, *host, *port;
++	unsigned char address[16];
++	size_t i, used;
++	int section = 0, have_interface = 0, have_peer = 0, result = -1;
++
++	if (!file_path || !file_path[0] || wgc_unit < 1 || wgc_unit > WG_CLIENT_MAX)
+ 		return -1;
+-
+-	snprintf(wgc_prefix, sizeof(wgc_prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, wgc_unit);
+-
+-	nvram_pf_restore_default("wgc_", wgc_prefix);
+-
+-	fp = fopen(file_path, "r");
+-	if (fp)
+-	{
+-		while (fgets(buf, sizeof(buf), fp))
+-		{
+-			strtok(buf, "\r\n");
+-			if (buf[0] == '[' || buf[0] == '#' || buf[0] == '\n' || buf[0] == '\r')
+-				continue;
+-			else if (!strncmp(buf, "PrivateKey", 10))
+-				nvram_pf_set(wgc_prefix, "priv", _get_wgconf_val(buf));
+-			else if (!strncmp(buf, "Address", 7))
+-			{
+-				if (*addresses)
+-					 strlcat(addresses, ",", sizeof(addresses));
+-				strlcat(addresses, _get_wgconf_val(buf), sizeof(addresses));
+-			}
+-			else if (!strncmp(buf, "DNS", 3))
+-			{
+-				if (*dns)
+-					strlcat(dns, ",", sizeof(dns));
+-				strlcat(dns, _get_wgconf_val(buf), sizeof(dns));
+-			}
+-			else if (!strncmp(buf, "PublicKey", 9))
+-				nvram_pf_set(wgc_prefix, "ppub", _get_wgconf_val(buf));
+-			else if (!strncmp(buf, "PresharedKey", 12))
+-				nvram_pf_set(wgc_prefix, "psk", _get_wgconf_val(buf));
+-			else if (!strncmp(buf, "AllowedIPs", 10))
+-			{
+-				if (*allowedips)
+-					strlcat(allowedips, ",", sizeof(allowedips));
+-				strlcat(allowedips, _get_wgconf_val(buf), sizeof(allowedips));
+-			}
+-			else if (!strncmp(buf, "Endpoint", 8))
+-			{
+-				char *ep, *p;
+-				ep = _get_wgconf_val(buf);
+-				p = strrchr(ep, ':');
+-				if (p) {
+-					*p = '\0';
+-					if (ep[0] == '[' && *(p-1) == ']') {
+-						ep += 1;
+-						*(p-1) = '\0';
+-					}
+-					nvram_pf_set(wgc_prefix, "ep_addr", ep);
+-					nvram_pf_set(wgc_prefix, "ep_port", p+1);
+-				}
+-				else {
+-					logmessage_normal("WG", "Unrecognized: [%s]", buf);
+-				}
+-			}
+-			else if (!strncmp(buf, "PersistentKeepalive", 19))
+-				nvram_pf_set(wgc_prefix, "alive", _get_wgconf_val(buf));
+-			else if (!strncmp(buf, "MTU", 3))
+-				nvram_pf_set(wgc_prefix, "mtu", _get_wgconf_val(buf));
+-			else
+-			{
+-				cprintf("[WG] Unsupport: [%s]\n", buf);
+-				logmessage_normal("WG", "Unsupport: [%s]", buf);
+-			}
+-		}
++	if (!(fp = fopen(file_path, "r"))) return -1;
++	if (fseek(fp, 0, SEEK_END) || (length = ftell(fp)) <= 0 || length > 65536
++		|| fseek(fp, 0, SEEK_SET) || !(data = malloc(length + 1))) {
+ 		fclose(fp);
+-
+-		if (*allowedips)
+-			nvram_pf_set(wgc_prefix, "aips", allowedips);
+-		if (*dns)
+-			nvram_pf_set(wgc_prefix, "dns", dns);
+-		if (*addresses)
+-			nvram_pf_set(wgc_prefix, "addr", addresses);
+-	}
+-	else
+ 		return -1;
+-
+-	return 0;
++	}
++	if (fread(data, 1, length, fp) != (size_t)length || ferror(fp) || memchr(data, '\0', length)) {
++		fclose(fp);
++		free(data);
++		return -1;
++	}
++	fclose(fp);
++	data[length] = '\0';
++	cursor = data;
++	while ((line = strsep(&cursor, "\n"))) {
++		if ((read = strchr(line, '#'))) *read = '\0';
++		/* WireGuard configuration ignores ASCII whitespace, including CRLF. */
++		for (read = write = line; *read; read++)
++			if (!isspace((unsigned char)*read)) *write++ = *read;
++		*write = '\0';
++		if (!line[0]) continue;
++		if (!strcasecmp(line, "[Interface]")) {
++			if (have_interface || have_peer) goto done;
++			have_interface = 1;
++			section = 1;
++			continue;
++		}
++		if (!strcasecmp(line, "[Peer]")) {
++			/* One router client profile cannot represent multiple peers. */
++			if (!have_interface || have_peer) goto done;
++			have_peer = 1;
++			section = 2;
++			continue;
++		}
++		if (!section || !(value = strchr(line, '='))) goto done;
++		*value++ = '\0';
++		for (i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
++			if (!strcasecmp(line, fields[i].name)) break;
++		/* Reject options that cannot be represented instead of silently dropping them. */
++		if (i == sizeof(fields) / sizeof(fields[0]) || fields[i].section != section
++			|| (fields[i].seen && !fields[i].multiple)) goto done;
++		if (!value[0] && strcmp(fields[i].name, "PresharedKey")) goto done;
++		used = strlen(fields[i].value);
++		if (used + (used ? 1 : 0) + strlen(value) >= fields[i].capacity) goto done;
++		if (used) strcat(fields[i].value, ",");
++		strcat(fields[i].value, value);
++		fields[i].seen = 1;
++	}
++	if (!have_peer || !wgconf_key(priv) || !wgconf_key(pub) || (psk[0] && !wgconf_key(psk))
++		|| !addr[0] || !allowed[0] || !endpoint[0]
++		|| !wgconf_list(addr, 0) || !wgconf_list(allowed, 0)
++		|| (dns[0] && !wgconf_list(dns, 1))
++		|| (mtu[0] && !wgconf_number(mtu, 65535))) goto done;
++	if (!strcasecmp(alive, "off")) strcpy(alive, "0");
++	if (alive[0] && !wgconf_number(alive, 65535)) goto done;
++	if (endpoint[0] == '[') {
++		host = endpoint + 1;
++		if (!(port = strchr(host, ']')) || port[1] != ':') goto done;
++		*port = '\0';
++		port += 2;
++		if (inet_pton(AF_INET6, host, address) != 1) goto done;
++	} else {
++		host = endpoint;
++		if (!(port = strchr(host, ':')) || port != strrchr(host, ':')) goto done;
++		*port++ = '\0';
++		if (!wgconf_host(host)) goto done;
++	}
++	if (!wgconf_number(port, 65535) || strtoul(port, NULL, 10) == 0) goto done;
++
++	/* No parser error above this point has modified any profile settings. */
++	snprintf(prefix, sizeof(prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, wgc_unit);
++	nvram_pf_restore_default("wgc_", prefix);
++	for (i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
++		if (fields[i].seen && fields[i].nvname)
++			nvram_pf_set(prefix, fields[i].nvname, fields[i].value);
++	nvram_pf_set(prefix, "ep_addr", host);
++	nvram_pf_set(prefix, "ep_port", port);
++	result = 0;
++done:
++	free(data);
++	return result;
+ }
+ 
+ #define WG_DIR_CONF    "/etc/wg"
+--- a/release/src/router/httpd/web.c
++++ b/release/src/router/httpd/web.c
+@@ -27274,13 +27274,20 @@
+ 	int ret;
+ 	char *wgc_upload_unit = nvram_safe_get("wgc_upload_unit");
+ 	long unit;
++	char *end;
++
++	nvram_set("wgc_upload_state", "err");
+ 
+ 	if(*wgc_upload_unit == '\0') {
+ 		unlink(WGC_CONFIG_FILE);
+ 		return;
+ 	}
+ 
+-	unit = strtol(wgc_upload_unit, NULL, 0);
++	unit = strtol(wgc_upload_unit, &end, 10);
++	if (end == wgc_upload_unit || *end || unit < 1 || unit > WG_CLIENT_MAX) {
++		unlink(WGC_CONFIG_FILE);
++		return;
++	}
+ 
+ #ifdef RTCONFIG_HTTPS
+ 	if(do_ssl)
