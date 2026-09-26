@@ -25704,6 +25704,9 @@ int init_main(int argc, char *argv[])
 		asm1042_upgrade(1);	// check whether upgrade firmware of ASM1042
 #endif
 
+		run_custom_script("init-start", 0, NULL, NULL);
+		use_custom_config("fstab", "/etc/fstab");
+		run_postconf("fstab", "/etc/fstab");
 		state = SIGUSR2;	/* START */
 
 #if !defined(RTCONFIG_BCMARM) || defined(RTCONFIG_HND_ROUTER)

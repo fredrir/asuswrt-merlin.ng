@@ -243,7 +243,12 @@ define(function(){
 				index: "menu_VPN", 
 				tab: [
 					{url: "Advanced_VPNServer_Content.asp", tabName: "<#BOP_isp_heart_item#>"},
-					{url: "Advanced_VPNClient_Content.asp", tabName: (vpn_fusion_support) ? "<#VPN_Fusion#>" : "<#vpnc_title#>"},
+					{url: "Advanced_VPN_OpenVPN.asp", tabName: "OpenVPN Server"},
+					{url: "Advanced_VPNDirector.asp", tabName: "VPN Director"},
+					{url: "Advanced_OpenVPNClient_Content.asp", tabName: "OpenVPN Client"},
+					{url: "Advanced_WireguardClient_Content.asp", tabName: "WireGuard Client"},
+					{url: "Advanced_WireguardServer_Content.asp", tabName: "WireGuard Server"},
+					{url: "Advanced_VPNStatus.asp", tabName: "VPN Status"},
 					{url: "Advanced_TOR_Content.asp", tabName: "TOR"},
 					{url: "Advanced_Instant_Guard.asp", tabName: "<#Instant_Guard_title#>"},
 					{url: "NULL", tabName: "__INHERIT__"}

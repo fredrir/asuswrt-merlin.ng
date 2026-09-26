@@ -3937,6 +3937,9 @@ define RouterOptions
 	if [ "$(VPN_FUSION)" = "y" ]; then \
 		sed -i "/RTCONFIG_VPN_FUSION/d" $(1); \
 		echo "RTCONFIG_VPN_FUSION=y" >>$(1); \
+		if [ "$(VPN_FUSION_MERLIN)" = "y" ]; then \
+			echo "RTCONFIG_VPN_FUSION_MERLIN=y" >>$(1); \
+		fi; \
 		if [ "$(MTLANCFG)" = "y" ]; then \
 			sed -i "/RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE/d" $(1); \
 			echo "RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE=y" >>$(1); \
@@ -3948,6 +3951,9 @@ define RouterOptions
 	if [ "$(VPN_FUSION_V2)" = "y" ]; then \
 		sed -i "/RTCONFIG_VPN_FUSION/d" $(1); \
 		echo "RTCONFIG_VPN_FUSION=y" >>$(1); \
+		if [ "$(VPN_FUSION_MERLIN)" = "y" ]; then \
+			echo "RTCONFIG_VPN_FUSION_MERLIN=y" >>$(1); \
+		fi; \
 		sed -i "/RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE/d" $(1); \
 		echo "RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE=y" >>$(1); \
 	fi;
@@ -4839,6 +4845,9 @@ define RouterOptions
 		echo "RTCONFIG_INSTANT_GUARD=y" >>$(1); \
 		sed -i "/RTCONFIG_VPN_FUSION/d" $(1); \
 		echo "RTCONFIG_VPN_FUSION=y" >>$(1); \
+		if [ "$(VPN_FUSION_MERLIN)" = "y" ]; then \
+			echo "RTCONFIG_VPN_FUSION_MERLIN=y" >>$(1); \
+		fi; \
 		sed -i "/RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE/d" $(1); \
 		echo "RTCONFIG_VPN_FUSION_SUPPORT_INTERFACE=y" >>$(1); \
 		sed -i "/CONFIG_PPP_MPPE/d" $(1); \

@@ -470,7 +470,11 @@ void _start_sdn_stubby(const MTLAN_T *pmtl, char *config_file, const size_t path
 	if (nv)
 		free(nv);
 
+	snprintf(buf, sizeof(buf), "stubby-%d.yml", pmtl->nw_t.idx);
+	append_custom_config(buf, fp);
 	fclose(fp);
+	snprintf(buf, sizeof(buf), "%d", pmtl->sdn_t.sdn_idx);
+	run_custom_script("stubby-sdn.postconf", 120, config_file, buf);
 	chmod(config_file, 0644);
 
 	if (nvram_get_int("stubby_debug")) {
@@ -525,7 +529,7 @@ static int _handle_sdn_stubby(const MTLAN_T *pmtl, const int action)
 static int _gen_sdn_dnsmasq_conf(const MTLAN_T *pmtl, char *config_file, const size_t path_len)
 {
 	FILE *fp;
-	char resolv_path[64];
+	char resolv_path[64], buf[32];
 	int resolv_flag = 0, n;
 #if defined(RTCONFIG_DNSFILTER)
 	int count;
@@ -813,9 +817,17 @@ static int _gen_sdn_dnsmasq_conf(const MTLAN_T *pmtl, char *config_file, const s
 
 		// TODO: TR-069 related.
 
+#ifdef RTCONFIG_OPENVPN
+		write_ovpn_client_dnsmasq_config(fp);
+#endif
+
 		// TODO: Set VPN server
 
+		snprintf(buf, sizeof(buf), "dnsmasq-%d.conf", pmtl->sdn_t.sdn_idx);
+		append_custom_config(buf, fp);
 		fclose(fp);
+		snprintf(buf, sizeof(buf), "%d", pmtl->sdn_t.sdn_idx);
+		run_custom_script("dnsmasq-sdn.postconf", 120, config_file, buf);
 		return 0;
 	}
 	return -1;
@@ -1385,6 +1397,10 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 	if (!pmtl)
 		return -1;
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_IPV6) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	amvpn_refresh_ipv6_killswitch();
+#endif
+
 	_remove_sdn_routing_rule(pmtl, 0);
 #ifdef RTCONFIG_IPV6
 	_remove_sdn_routing_rule(pmtl, 1);
@@ -1400,6 +1416,10 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 		else
 			snprintf(pref, sizeof(pref), "%d", IP_RULE_PREF_DEFAULT_CONN);
 		eval("ip", "rule", "add", "iif", (char*)pmtl->nw_t.ifname, "table", table, "pref", pref);
+		VPN_VPNX_T vpnx;
+		if (get_vpnx_by_vpnc_idx(&vpnx, pmtl->sdn_t.vpnc_idx) && vpnx.proto == VPN_PROTO_OVPN)
+			amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, vpnx.unit, (char *)pmtl->nw_t.ifname);
+
 #ifdef RTCONFIG_IPV6
 		_remove_sdn_routing_rule(pmtl, 1);
 #ifdef RTCONFIG_VPN_FUSION

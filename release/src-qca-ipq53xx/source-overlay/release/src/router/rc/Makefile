@@ -580,9 +580,9 @@ OBJS += snmpd.o
 endif
 ifeq ($(RTCONFIG_OPENVPN),y)
 CFLAGS += -DRTCONFIG_CROND
-CFLAGS += -I$(TOP)/libvpn
-LDFLAGS += -L$(TOP)/libvpn -lvpn
-OBJS += ovpn.o
+CFLAGS += -I$(TOP)/libovpn
+LDFLAGS += -L$(TOP)/libovpn -lovpn
+OBJS += openvpn.o ovpn-accounts.o
 endif
 
 ifeq ($(RTCONFIG_TPVPN),y)
@@ -711,7 +711,7 @@ endif
 
 ifeq ($(RTCONFIG_VPNC),y)
 ifeq ($(RTCONFIG_VPN_FUSION),y)
-OBJS += vpnc_fusion.o
+OBJS += vpnc_fusion.o vpnc_legacy.o
 else
 OBJS += vpnc.o
 endif

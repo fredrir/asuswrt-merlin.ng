@@ -16,7 +16,7 @@ my $ShFile = ">".$TempFilePath;
 
 my $FH;
 open($FH, $ShFile);
-printf $FH "#!/bin/sh\n";
+printf $FH "#!/bin/sh\nset -e\n";
 
 my $location = $FilePath;
 my $n = 0;
@@ -88,7 +88,7 @@ sub addcommand {
 	 }
 	 printf $FH $ToolHelp."/rmvcomments.pl"." ".$fn."\n";
 	 printf $FH $ToolHelp."/LnxRmvTabs"." ".$fn."\n";
-	 printf $FH $ToolHelp."/LnxHtmlEnumDict"." ".$fn." ".$DictEnum." ".$DictNoFound."\n";
+	 printf $FH "python3 ".$ToolHelp."/html-enum.py"." ".$fn." ".$DictEnum." ".$DictNoFound."\n";
 }
 
 sub readsub {

@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <ctype.h>
+#include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
@@ -294,97 +296,177 @@ int is_tpvpn_configured(int provider, const char* region, const char* conntype, 
 #endif
 
 #if defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_WIREGUARD) || defined(RTCONFIG_NORDVPN)
-static char* _get_wgconf_val(char* buf)
+/* Validate the complete single-peer profile before changing any NVRAM. */
+static int wgconf_number(const char *value, unsigned long max)
 {
-	char *p = buf;
-	int i = 0, len = 0, j = 0;
-
-	if (!buf)
-		return p;
-	if ((p = strchr(buf, '='))) p++;
-
-	len = strlen(p);
-	for (i = 0; i < len; i++)
-	{
-		if (p[i] == ' ' || p[i] == '\r' || p[i] == '\n')
-		{
-			for(j = i; j < len; j++)
-			{
-				p[j] = p[j+1];
-			}
-			len--;
-		}
-	}
-	return p;
+	char *end;
+	unsigned long number;
+	if (!value[0] || strspn(value, "0123456789") != strlen(value))
+		return 0;
+	number = strtoul(value, &end, 10);
+	return !*end && number <= max;
 }
 
-int read_wgc_config_file(const char* file_path, int wgc_unit)
+static int wgconf_key(const char *value)
 {
-	char wgc_prefix[8] = {0};
-	FILE *fp;
-	char buf[256] = {0};
+	const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	const char *last;
+	int i;
+	if (strlen(value) != 44 || value[43] != '=')
+		return 0;
+	for (i = 0; i < 43; i++)
+		if (!strchr(alphabet, value[i])) return 0;
+	last = strchr(alphabet, value[42]);
+	return last && ((last - alphabet) & 3) == 0;
+}
 
-	if (!file_path || file_path[0] == '\0')
-		return -1;
+static int wgconf_host(const char *value)
+{
+	unsigned char address[16];
+	size_t len = strlen(value);
+	if (inet_pton(AF_INET, value, address) == 1 || inet_pton(AF_INET6, value, address) == 1)
+		return 1;
+	return len && len <= 253 && value[0] != '.' && value[0] != '-'
+		&& !strstr(value, "..")
+		&& strspn(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.") == len;
+}
 
-	snprintf(wgc_prefix, sizeof(wgc_prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, wgc_unit);
-
-	nvram_pf_restore_default("wgc_", wgc_prefix);
-
-	fp = fopen(file_path, "r");
-	if (fp)
-	{
-		while (fgets(buf, sizeof(buf), fp))
-		{
-			strtok(buf, "\r\n");
-			if (buf[0] == '[' || buf[0] == '#' || buf[0] == '\n')
-				continue;
-			else if (!strncmp(buf, "PrivateKey", 10))
-				nvram_pf_set(wgc_prefix, "priv", _get_wgconf_val(buf));
-			else if (!strncmp(buf, "Address", 7))
-				nvram_pf_set(wgc_prefix, "addr", _get_wgconf_val(buf));
-			else if (!strncmp(buf, "DNS", 3))
-				nvram_pf_set(wgc_prefix, "dns", _get_wgconf_val(buf));
-			else if (!strncmp(buf, "PublicKey", 9))
-				nvram_pf_set(wgc_prefix, "ppub", _get_wgconf_val(buf));
-			else if (!strncmp(buf, "PresharedKey", 12))
-				nvram_pf_set(wgc_prefix, "psk", _get_wgconf_val(buf));
-			else if (!strncmp(buf, "AllowedIPs", 10))
-				nvram_pf_set(wgc_prefix, "aips", _get_wgconf_val(buf));
-			else if (!strncmp(buf, "Endpoint", 8))
-			{
-				char *ep, *p;
-				ep = _get_wgconf_val(buf);
-				p = strrchr(ep, ':');
-				if (p) {
-					*p = '\0';
-					if (ep[0] == '[' && *(p-1) == ']') {
-						ep += 1;
-						*(p-1) = '\0';
-					}
-					nvram_pf_set(wgc_prefix, "ep_addr", ep);
-					nvram_pf_set(wgc_prefix, "ep_port", p+1);
-				}
-				else {
-					logmessage_normal("WG", "Unrecognized: [%s]", buf);
-				}
-			}
-			else if (!strncmp(buf, "PersistentKeepalive", 19))
-				nvram_pf_set(wgc_prefix, "alive", _get_wgconf_val(buf));
-			else if (!strncmp(buf, "MTU", 3))
-				nvram_pf_set(wgc_prefix, "mtu", _get_wgconf_val(buf));
-			else
-			{
-				cprintf("[WG] Unsupport: [%s]\n", buf);
-				logmessage_normal("WG", "Unsupport: [%s]", buf);
-			}
+static int wgconf_list(const char *value, int dns)
+{
+	char *copy, *cursor, *item, *mask;
+	unsigned char address[16];
+	int bits, valid = 1;
+	if (!(copy = strdup(value))) return 0;
+	cursor = copy;
+	while ((item = strsep(&cursor, ","))) {
+		if (dns) {
+			if (!wgconf_host(item)) { valid = 0; break; }
+			continue;
 		}
-		fclose(fp);
+		mask = strchr(item, '/');
+		if (mask) *mask++ = '\0';
+		bits = inet_pton(AF_INET, item, address) == 1 ? 32 :
+			(inet_pton(AF_INET6, item, address) == 1 ? 128 : 0);
+		if (!bits || (mask && !wgconf_number(mask, bits))) { valid = 0; break; }
 	}
-	else
-		return -1;
+	free(copy);
+	return valid;
+}
 
-	return 0;
+int read_wgc_config_file(const char *file_path, int wgc_unit)
+{
+	char prefix[8], priv[45] = "", pub[45] = "", psk[45] = "";
+	char addr[64] = "", dns[128] = "", mtu[6] = "", allowed[4096] = "";
+	char endpoint[264] = "", alive[6] = "";
+	struct {
+		const char *name, *nvname;
+		char *value;
+		size_t capacity;
+		int section, multiple, seen;
+	} fields[] = {
+		{ "PrivateKey", "priv", priv, sizeof(priv), 1, 0, 0 },
+		{ "Address", "addr", addr, sizeof(addr), 1, 1, 0 },
+		{ "DNS", "dns", dns, sizeof(dns), 1, 1, 0 },
+		{ "MTU", "mtu", mtu, sizeof(mtu), 1, 0, 0 },
+		{ "PublicKey", "ppub", pub, sizeof(pub), 2, 0, 0 },
+		{ "PresharedKey", "psk", psk, sizeof(psk), 2, 0, 0 },
+		{ "AllowedIPs", "aips", allowed, sizeof(allowed), 2, 1, 0 },
+		{ "Endpoint", NULL, endpoint, sizeof(endpoint), 2, 0, 0 },
+		{ "PersistentKeepalive", "alive", alive, sizeof(alive), 2, 0, 0 },
+	};
+	FILE *fp;
+	long length;
+	char *data = NULL, *cursor, *line, *value, *read, *write, *host, *port;
+	unsigned char address[16];
+	size_t i, used;
+	int section = 0, have_interface = 0, have_peer = 0, result = -1;
+
+	if (!file_path || !file_path[0] || wgc_unit < 1 || wgc_unit > WG_CLIENT_MAX)
+		return -1;
+	if (!(fp = fopen(file_path, "r"))) return -1;
+	if (fseek(fp, 0, SEEK_END) || (length = ftell(fp)) <= 0 || length > 65536
+		|| fseek(fp, 0, SEEK_SET) || !(data = malloc(length + 1))) {
+		fclose(fp);
+		return -1;
+	}
+	if (fread(data, 1, length, fp) != (size_t)length || ferror(fp) || memchr(data, '\0', length)) {
+		fclose(fp);
+		free(data);
+		return -1;
+	}
+	fclose(fp);
+	data[length] = '\0';
+	cursor = data;
+	while ((line = strsep(&cursor, "\n"))) {
+		if ((read = strchr(line, '#'))) *read = '\0';
+		/* WireGuard configuration ignores ASCII whitespace, including CRLF. */
+		for (read = write = line; *read; read++)
+			if (!isspace((unsigned char)*read)) *write++ = *read;
+		*write = '\0';
+		if (!line[0]) continue;
+		if (!strcasecmp(line, "[Interface]")) {
+			if (have_interface || have_peer) goto done;
+			have_interface = 1;
+			section = 1;
+			continue;
+		}
+		if (!strcasecmp(line, "[Peer]")) {
+			/* One router client profile cannot represent multiple peers. */
+			if (!have_interface || have_peer) goto done;
+			have_peer = 1;
+			section = 2;
+			continue;
+		}
+		if (!section || !(value = strchr(line, '='))) goto done;
+		*value++ = '\0';
+		for (i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
+			if (!strcasecmp(line, fields[i].name)) break;
+		/* Reject options that cannot be represented instead of silently dropping them. */
+		if (i == sizeof(fields) / sizeof(fields[0]) || fields[i].section != section
+			|| (fields[i].seen && !fields[i].multiple)) goto done;
+		if (!value[0] && strcmp(fields[i].name, "PresharedKey")) goto done;
+		used = strlen(fields[i].value);
+		if (used + (used ? 1 : 0) + strlen(value) >= fields[i].capacity) goto done;
+		if (used) strcat(fields[i].value, ",");
+		strcat(fields[i].value, value);
+		fields[i].seen = 1;
+	}
+	if (!have_peer || !wgconf_key(priv) || !wgconf_key(pub) || (psk[0] && !wgconf_key(psk))
+		|| !addr[0] || !allowed[0] || !endpoint[0]
+		|| !wgconf_list(addr, 0) || !wgconf_list(allowed, 0)
+		|| (dns[0] && !wgconf_list(dns, 1))
+		|| (mtu[0] && !wgconf_number(mtu, 65535))) goto done;
+	if (!strcasecmp(alive, "off")) strcpy(alive, "0");
+	if (alive[0] && !wgconf_number(alive, 65535)) goto done;
+	if (endpoint[0] == '[') {
+		host = endpoint + 1;
+		if (!(port = strchr(host, ']')) || port[1] != ':') goto done;
+		*port = '\0';
+		port += 2;
+		if (inet_pton(AF_INET6, host, address) != 1) goto done;
+	} else {
+		host = endpoint;
+		/* Match wg setconf: an unbracketed IPv6 endpoint uses the last colon. */
+		if (!(port = strrchr(host, ':'))) goto done;
+		*port++ = '\0';
+		if (!wgconf_host(host)) goto done;
+	}
+	if (!wgconf_number(port, 65535) || strtoul(port, NULL, 10) == 0) goto done;
+
+	/* No parser error above this point has modified any profile settings. */
+	snprintf(prefix, sizeof(prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, wgc_unit);
+	nvram_pf_restore_default("wgc_", prefix);
+	/* An omitted wg keepalive means disabled, independent of the UI default. */
+	if (!alive[0]) nvram_pf_set(prefix, "alive", "0");
+	for (i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
+		if (fields[i].seen && fields[i].nvname)
+			nvram_pf_set(prefix, fields[i].nvname, fields[i].value);
+	nvram_pf_set(prefix, "ep_addr", host);
+	nvram_pf_set(prefix, "ep_port", port);
+	result = 0;
+done:
+	free(data);
+	return result;
 }
 
 #define WG_DIR_CONF    "/etc/wg"
@@ -402,7 +484,7 @@ int is_wgc_connected(int unit)
 	memset(buf, 0 , sizeof(buf));
 	if (f_read_string(filename, buf, sizeof(buf)) > 0) {
 		char *p = strstr(buf, "sec:");
-		unsigned long long t = (p) ? strtoull (p + 4, NULL, 0) : 0;
+		unsigned long long t = (p) ? strtoull (p + 4, NULL, 0) : 999;
 		if (strstr(buf, "Now"))
 			return 1;
 		else if (t <= 180)
@@ -414,3 +496,125 @@ int is_wgc_connected(int unit)
 		return 0;
 }
 #endif
+
+
+// Imported from rc/wireguard.c, for use in libovpn
+#ifdef RTCONFIG_WIREGUARD
+
+#ifdef RTCONFIG_HND_ROUTER
+#define BLOG_SKIP_PORT "/proc/blog/skip_wireguard_port"
+#define BLOG_SKIP_NET "/proc/blog/skip_wireguard_network"
+#define WG_NAME_SKIP_NET "hndnet"
+#endif
+
+
+#if defined(RTCONFIG_HND_ROUTER_AX_6756) || defined(RTCONFIG_BCM_502L07P2) || defined(RTCONFIG_HND_ROUTER_AX_675X) || defined(RTCONFIG_HND_ROUTER_BE_4916)
+int _wg_check_same_port(wg_type_t type, int unit, int port)
+{
+	int i;
+	char prefix[16] = {0};
+
+	for (i = 1; i <= WG_SERVER_MAX; i++) {
+		if (type == WG_TYPE_SERVER && unit == i)
+			continue;
+		snprintf(prefix, sizeof(prefix), "%s%d_", WG_SERVER_NVRAM_PREFIX, i);
+		if (nvram_pf_get_int(prefix, "enable") && port == nvram_pf_get_int(prefix, "port"))
+			return 1;
+	}
+	for (i = 1; i <= WG_CLIENT_MAX; i++) {
+		if (type == WG_TYPE_CLIENT && unit == i)
+			continue;
+		snprintf(prefix, sizeof(prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, i);
+		if (nvram_pf_get_int(prefix, "enable") && port == nvram_pf_get_int(prefix, "ep_port"))
+			return 1;
+	}
+	return 0;
+}
+
+void hnd_skip_wg_port(int add, int port, wg_port_t type)
+{
+	char buf[64] = {0};
+	char *ctrl = (add) ? "add" : "del";
+	char *port_type[] = {"dport", "sport", "either"};
+
+	snprintf(buf, sizeof(buf), "%s %d %s", ctrl, port, port_type[type]);
+	f_write_string(BLOG_SKIP_PORT, buf, 0, 0);
+}
+
+void hnd_skip_wg_network(int add, const char* net)
+{
+	char buf[64] = {0};
+	char *ctrl = (add) ? "add" : "del";
+	int ret;
+
+	if (!net || !*net)
+		return;
+
+	if (strchr(net, '/'))
+		snprintf(buf, sizeof(buf), "%s %s", ctrl, net);
+	else {
+		ret = is_valid_ip(net);
+		if (ret > 1)
+			snprintf(buf, sizeof(buf), "%s %s/128", ctrl, net);
+		else if (ret > 0)
+			snprintf(buf, sizeof(buf), "%s %s/32", ctrl, net);
+	}
+	_dprintf("[%s] > %s\n", buf, BLOG_SKIP_NET);
+	f_write_string(BLOG_SKIP_NET, buf, 0, 0);
+}
+
+void hnd_skip_wg_all_lan(int add)
+{
+	char path[128] = {0};
+	char buf[512] = {0};
+	char net[64] = {0}, *next = NULL;
+
+	snprintf(path, sizeof(path), "%s/all_%s", WG_DIR_CONF, WG_NAME_SKIP_NET);
+
+	f_read_string(path, buf, sizeof(buf));
+	foreach_44(net, buf, next) {
+		hnd_skip_wg_network(0, net);
+	}
+	unlink(path);
+
+	if (add) {
+		get_network_addr_by_ip_prefix(nvram_safe_get("lan_ipaddr"), nvram_safe_get("lan_netmask"), buf, sizeof(buf));
+		hnd_skip_wg_network(add, buf);
+		f_write_string(path, buf, 0, 0);
+
+#if 0//RTCONFIG_IPV6
+		int v6_service = get_ipv6_service();
+		int dhcp_pd = nvram_get_int(ipv6_nvname("ipv6_dhcp_pd"));
+		if ((v6_service == IPV6_NATIVE_DHCP && dhcp_pd)
+		 || v6_service == IPV6_6IN4 || v6_service == IPV6_MANUAL) {
+			snprintf(buf, sizeof(buf), ",%s/%d", nvram_safe_get(ipv6_nvname("ipv6_prefix")), nvram_get_int(ipv6_nvname("ipv6_prefix_length")));
+			f_write_string(path, buf, FW_APPEND, 0);
+		}
+#endif
+	}
+}
+#endif
+#endif
+
+#ifdef RTCONFIG_WIREGUARD
+extern struct nvram_tuple router_defaults[];
+
+void reset_wgc_setting(int unit){
+	struct nvram_tuple *t;
+	char varname[32];
+	char *cur;
+
+	logmessage("wireguard","Resetting VPN client %d to default settings", unit);
+
+	// Reset vars
+	for (t = router_defaults; t->name; t++) {
+		if (strncmp(t->name, "wgc_", 4)==0)
+		{
+			snprintf(varname, sizeof (varname), "wgc%d_%s", unit, t->name+4);
+			nvram_unset(varname);
+		}
+	}
+	nvram_commit();
+}
+#endif
+

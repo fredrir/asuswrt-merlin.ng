@@ -198,9 +198,7 @@ endif
 ifeq ($(RTCONFIG_MULTILAN_CFG),y)
 OBJS += mtlan_utils.o
 endif
-ifeq ($(RTCONFIG_TOR),y)
 OBJS += scripts.o
-endif
 ifeq ($(RTCONFIG_AHS),y)
 OBJS += $(if $(wildcard notify_ahs.c),notify_ahs.o,prebuild/notify_ahs.o)
 endif
@@ -534,7 +532,7 @@ endif
 
 ifeq ($(or $(RTCONFIG_VPN_FUSION),$(RTCONFIG_TPVPN),$(RTCONFIG_IG_SITE2SITE),$(RTCONFIG_WIREGUARD)),y)
 OBJS += vpn_utils.o
-CFLAGS += -I$(TOP)/libvpn/
+CFLAGS += -I$(TOP)/libovpn/
 endif
 
 ifeq ($(OPDBG),y)

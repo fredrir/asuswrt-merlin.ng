@@ -1129,7 +1129,7 @@ obj-$(RTCONFIG_ASD) += onig-6.9.9
 obj-$(RTCONFIG_ASD) += jq-1.7.1
 
 obj-$(RTCONFIG_OPENVPN) += openssl
-obj-$(RTCONFIG_OPENVPN) += libvpn
+obj-$(RTCONFIG_OPENVPN) += libovpn
 
 obj-y += rc
 obj-y += rom
@@ -1629,7 +1629,7 @@ obj-$(RTCONFIG_LZO) += lzo$(LZO_VER)
 obj-$(RTCONFIG_OPENVPN) += lz4
 obj-$(RTCONFIG_OPENVPN) += openpam
 obj-$(RTCONFIG_OPENVPN) += easy-rsa
-obj-$(RTCONFIG_OPENVPN) += openssl openvpn
+obj-$(RTCONFIG_OPENVPN) += openssl libcap-ng openvpn
 
 obj-$(CONFIG_LINUX26) += hotplug2
 obj-$(CONFIG_LINUX26) += udev
@@ -3871,7 +3871,7 @@ RC_EXT_PKG += sys_util gen_util
 endif
 
 
-rc: shared libev-4.33 $(if $(BCM_502L07P2),ethctl_lib) nvram$(BCMEX)$(EX7) libdisk $(if $(RTCONFIG_LIB_CODB),libcodb) $(if $(RTCONFIG_FBWIFI),fb_wifi) $(if $(RTCONFIG_QTN),libqcsapi_client) $(if $(CONFIG_LIBBCM),libbcm) $(if $(RTCONFIG_BWDPI),bwdpi_source) $(if $(RTCONFIG_USB_SMS_MODEM),smspdu) $(if $(RTCONFIG_OPENVPN),libvpn) $(if $(RTCONFIG_LANTIQ),libfapi-0.1) $(if $(RTCONFIG_CFGSYNC), $(CFGSYNC_PKG) $(if $(RTCONFIG_AMAS), amas-utils) $(if $(RTCONFIG_LANTIQ),hostapd-2.6)) json-c $(if $(or $(RTCONFIG_FRS_LIVE_UPDATE),$(RTCONFIG_FRS_FEEDBACK),$(RTCONFIG_URLFW),$(RTCONFIG_SOFTWIRE46)), curl) $(RC_EXT_PKG) $(if $(RTCONFIG_BRCM_HOSTAPD),wpa_supplicant-2.7) $(if $(RTCONFIG_MXL371X),mxl371x_sdk) $(if $(RTCONFIG_IP808AR),pse_lib) libwebapi
+rc: shared libev-4.33 $(if $(BCM_502L07P2),ethctl_lib) nvram$(BCMEX)$(EX7) libdisk $(if $(RTCONFIG_LIB_CODB),libcodb) $(if $(RTCONFIG_FBWIFI),fb_wifi) $(if $(RTCONFIG_QTN),libqcsapi_client) $(if $(CONFIG_LIBBCM),libbcm) $(if $(RTCONFIG_BWDPI),bwdpi_source) $(if $(RTCONFIG_USB_SMS_MODEM),smspdu) $(if $(RTCONFIG_OPENVPN),libovpn) $(if $(RTCONFIG_LANTIQ),libfapi-0.1) $(if $(RTCONFIG_CFGSYNC), $(CFGSYNC_PKG) $(if $(RTCONFIG_AMAS), amas-utils) $(if $(RTCONFIG_LANTIQ),hostapd-2.6)) json-c $(if $(or $(RTCONFIG_FRS_LIVE_UPDATE),$(RTCONFIG_FRS_FEEDBACK),$(RTCONFIG_URLFW),$(RTCONFIG_SOFTWIRE46)), curl) $(RC_EXT_PKG) $(if $(RTCONFIG_BRCM_HOSTAPD),wpa_supplicant-2.7) $(if $(RTCONFIG_MXL371X),mxl371x_sdk) $(if $(RTCONFIG_IP808AR),pse_lib) libwebapi
 
 rc-install:
 	$(MAKE) -C rc INSTALLDIR=$(INSTALLDIR)/rc install
@@ -7404,13 +7404,31 @@ easy-rsa-install:
 	mkdir -p $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
 	install easy-rsa/2.0/* $(TARGETDIR)/rom/$(EX_ROM)/easy-rsa
 
+libcap-ng/Makefile:
+	cd libcap-ng && ./autogen.sh && \
+	CFLAGS="-Os -ffunction-sections -fdata-sections $(EXTRACFLAGS)" \
+	LDFLAGS="-ffunction-sections -fdata-sections -Wl,--gc-sections $(EXTRALDFLAGS)" \
+	$(CONFIGURE) --prefix=/usr --bindir=/usr/sbin --libdir=/usr/lib \
+		--disable-static --without-python --without-python3
+
+libcap-ng: libcap-ng/Makefile
+	$(MAKE) -C $@
+
+libcap-ng-install: libcap-ng
+	install -D libcap-ng/src/.libs/libcap-ng.so.0.0.0 $(INSTALLDIR)/libcap-ng/usr/lib/libcap-ng.so.0.0.0
+	$(STRIP) $(INSTALLDIR)/libcap-ng/usr/lib/libcap-ng.so.0.0.0
+	cd $(INSTALLDIR)/libcap-ng/usr/lib && ln -sf libcap-ng.so.0.0.0 libcap-ng.so.0 && ln -sf libcap-ng.so.0.0.0 libcap-ng.so
+
+libcap-ng-clean:
+	[ ! -f libcap-ng/Makefile ] || $(MAKE) -C libcap-ng distclean
+
 openvpn/dh2048.pem:
 	openssl dhparam -dsaparam -out $@ 2048
 
-openvpn: shared $(if $(BCM_502L07P2),ethctl_lib) openssl lzo$(LZO_VER) openpam zlib openvpn/dh2048.pem openvpn/Makefile
+openvpn: shared $(if $(BCM_502L07P2),ethctl_lib) openssl lzo$(LZO_VER) libcap-ng openpam zlib openvpn/dh2048.pem openvpn/Makefile
 	$(MAKE) -j 8 -C $@
 
-openvpn/Makefile:
+openvpn/Makefile: libcap-ng
 	( cd openvpn ; ./autogen.sh ; \
 		OPENSSL_CFLAGS="-I$(TOP)/openssl/include" \
 		OPENSSL_LIBS="-L$(TOP)/openssl/ -lssl -lcrypto" \
@@ -7420,6 +7438,8 @@ openvpn/Makefile:
 		LZO_LIBS="-L$(TOP)/lzo$(LZO_VER)/src/.libs -llzo2" \
 		LZ4_CFLAGS="-I$(TOP)/lz4/lib" \
 		LZ4_LIBS="-L$(TOP)/lz4/lib -llz4" \
+		LIBCAPNG_CFLAGS="-I$(TOP)/libcap-ng/src" \
+		LIBCAPNG_LIBS="-L$(TOP)/libcap-ng/src/.libs -lcap-ng" \
 		CFLAGS="-Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -std=gnu99 \
 			-DASUSWRT" \
 		LDFLAGS="$(EXTRALDFLAGS) -ffunction-sections -fdata-sections \
@@ -7429,7 +7449,7 @@ openvpn/Makefile:
 		IPROUTE="/usr/sbin/ip" IFCONFIG="/sbin/ifconfig" ROUTE="/sbin/route" \
 		$(CONFIGURE) --prefix=/usr --bindir=/usr/sbin --libdir=/usr/lib \
 			--disable-debug --enable-management --disable-small \
-			--disable-selinux --disable-socks --enable-password-save \
+			--disable-selinux --disable-dco --enable-iproute2 \
 			--enable-plugin-auth-pam \
 			ac_cv_lib_resolv_gethostbyname=no \
 	)
@@ -11130,3 +11150,7 @@ $(obj-y) $(obj-n) $(obj-clean) $(obj-install): dummy
 .PHONY: dummy libnet libpcap
 
 
+
+.PHONY: libovpn
+libovpn: shared openssl
+	$(MAKE) -C libovpn

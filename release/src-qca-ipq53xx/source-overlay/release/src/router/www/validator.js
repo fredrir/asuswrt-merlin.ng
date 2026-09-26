@@ -13,6 +13,22 @@ var validator = {
 		}
 	},
 
+	safeName: function(obj, flag){
+		if (obj.value.length == 0) return true;
+
+		var re = new RegExp(/^[a-zA-Z0-9:\-_. ]+$/gi);
+		if(re.test(obj.value)){
+			return true;
+		}else{
+			if (flag != "noalert"){
+				alert("Only letters, numbers, spaces, underscores, periods and dashes are accepted.");
+				obj.focus();
+				obj.select();
+			}
+			return false;
+		}
+	},
+
 	account: function(string_obj, flag){
 		var invalid_char = "";
 

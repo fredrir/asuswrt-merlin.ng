@@ -111,6 +111,7 @@ typedef unsigned long long u64;
 #ifdef RTCONFIG_OPENVPN
 #include "openvpn_options.h"
 #include "openvpn_config.h"
+#include <amvpn_routing.h>
 #endif
 
 #include <net/if.h>
@@ -1355,6 +1356,8 @@ ej_nvram_clean_get(int eid, webs_t wp, int argc, char_t **argv)
 {
 	char *name, *c;
 	int ret = 0;
+	int unit;
+	char buffer[4096];
 
 	if (ejArgs(argc, argv, "%s", &name) < 1) {
 		if(hook_get_json == 1)
@@ -1363,16 +1366,29 @@ ej_nvram_clean_get(int eid, webs_t wp, int argc, char_t **argv)
 			websError(wp, 400, "Insufficient args\n");
 		return -1;
 	}
-
 	if(hook_get_json == 1)
 		websWrite(wp, "\"");
-	for (c = nvram_safe_get(name); *c; c++) {
+
+	if (!strcmp(name, "vpn_client_custom3")) {
+		unit = nvram_get_int("vpn_client_unit");
+		c = get_ovpn_custom(OVPN_TYPE_CLIENT, unit, buffer, sizeof (buffer));
+	}
+	else if (!strcmp(name, "vpn_server_custom3")) {
+		unit = nvram_get_int("vpn_server_unit");
+		c = get_ovpn_custom(OVPN_TYPE_SERVER, unit, buffer, sizeof (buffer));
+	}
+	else
+		c = nvram_safe_get(name);
+
+	while (*c) {
 		if (isprint(*c) &&
 			*c != '"' && *c != '&' && *c != '<' && *c != '>')
 				ret += websWrite(wp, "%c", *c);
 		else
 			ret += websWrite(wp, "&#%d;", *c);
+		c++;
 	}
+
 	if(hook_get_json == 1)
 		websWrite(wp, "\"");
 
@@ -1934,6 +1950,7 @@ ej_select_channel(int eid, webs_t wp, int argc, char_t **argv)
 static int
 ej_nvram_char_to_ascii(int eid, webs_t wp, int argc, char_t **argv)
 {
+	char policy_buffer[8000];
 	char *sid, *name;
 	char tmp[MAX_LINE_SIZE], name_tmp[50] = {0};
 	char *buf = tmp, *str;
@@ -1954,7 +1971,10 @@ ej_nvram_char_to_ascii(int eid, webs_t wp, int argc, char_t **argv)
 
 	wl_nband_to_wlx(name, name_tmp, sizeof(name_tmp));
 
-	str = nvram_safe_get_x(sid, name_tmp);
+	if (!strcmp(name, "vpndirector_rulelist"))
+		str = amvpn_get_policy_rules(-1, policy_buffer, sizeof(policy_buffer), VPNDIR_PROTO_NONE);
+	else
+		str = nvram_safe_get_x(sid, name_tmp);
 
 #if defined(RTCONFIG_NVRAM_ENCRYPT)
 	if(strcmp(name, "pptpd_clientlist") == 0 || strcmp(name, "vpn_serverx_clientlist") == 0){
@@ -3099,7 +3119,7 @@ ej_vpn_client_get_parameter(int eid, webs_t wp, int argc, char_t **argv)
 }
 static int
 ej_vpn_crt_server(int eid, webs_t wp, int argc, char **argv) {
-	char buf[4000];
+	char buf[8000];
 	char file_name[32];
 	int idx = 0;
 	if(hook_get_json == 1)
@@ -3263,7 +3283,7 @@ ej_vpn_crt_server(int eid, webs_t wp, int argc, char **argv) {
 }
 static int
 ej_vpn_crt_client(int eid, webs_t wp, int argc, char **argv) {
-	char buf[4000];
+	char buf[8000];
 	char file_name[32];
 	int idx = 0;
 
@@ -4240,9 +4260,9 @@ int validate_instance(webs_t wp, char *name, json_object *root)
 		for(i=1;i<=OVPN_SERVER_MAX;i++) {
 			snprintf(prefix, sizeof(prefix), "vpn_crt_server%d_", i);
 			value = get_cgi_json(strlcat_r(prefix, name+15, tmp, sizeof(tmp)),root);
-			if(value) {
+			if(value && strlen(value) <= 7999) {
 				ovpn_key_t key_type;
-				char buf[4096];
+				char buf[8000];
 
 				if(!strcmp(name+15, "static")) {
 					key_type = OVPN_SERVER_STATIC;
@@ -4258,6 +4278,9 @@ int validate_instance(webs_t wp, char *name, json_object *root)
 				}
 				else if(!strcmp(name+15, "crl")) {
 					key_type = OVPN_SERVER_CRL;
+				}
+				else if(!strcmp(name+15, "extra")) {
+					key_type = OVPN_SERVER_EXTRA;
 				}
 				else if(!strcmp(name+15, "dh")) {
 					key_type = OVPN_SERVER_DH;
@@ -4292,9 +4315,9 @@ int validate_instance(webs_t wp, char *name, json_object *root)
 		for(i=1;i<=OVPN_CLIENT_MAX;i++) {
 			snprintf(prefix, sizeof(prefix), "vpn_crt_client%d_", i);
 			value = get_cgi_json(strlcat_r(prefix, name+15, tmp, sizeof(tmp)),root);
-			if(value) {
+			if(value && strlen(value) <= 7999) {
 				ovpn_key_t key_type;
-				char buf[4096];
+				char buf[8000];
 
 				if(!strcmp(name+15, "static")) {
 					key_type = OVPN_CLIENT_STATIC;
@@ -4310,6 +4333,9 @@ int validate_instance(webs_t wp, char *name, json_object *root)
 				}
 				else if(!strcmp(name+15, "crl")) {
 					key_type = OVPN_CLIENT_CRL;
+				}
+				else if(!strcmp(name+15, "extra")) {
+					key_type = OVPN_CLIENT_EXTRA;
 				}
 				else {
 					continue;
@@ -4769,7 +4795,11 @@ int validate_apply(webs_t wp, json_object *root)
 				snprintf(prefix, sizeof(prefix), "vpn_server%d_", unit);
 				(void)strlcat_r(prefix, name+11, tmp, sizeof(tmp));
 
-				if(strcmp(nvram_safe_get(tmp), value)) {
+				if (!strcmp(name, "vpn_server_custom3")) {
+					if (set_ovpn_custom(OVPN_TYPE_SERVER, unit, value) == 0)
+						nvram_modified = 1;
+				}
+				else if(strcmp(nvram_safe_get(tmp), value)) {
 					nvram_set(tmp, value);
 					nvram_modified = 1;
 					_dprintf("set %s=%s\n", tmp, value);
@@ -4779,7 +4809,11 @@ int validate_apply(webs_t wp, json_object *root)
 				snprintf(prefix, sizeof(prefix), "vpn_client%d_", unit);
 				(void)strlcat_r(prefix, name+11, tmp, sizeof(tmp));
 
-				if(strcmp(nvram_safe_get(tmp), value)) {
+				if (!strcmp(name, "vpn_client_custom3")) {
+					if (set_ovpn_custom(OVPN_TYPE_CLIENT, unit, value) == 0)
+						nvram_modified = 1;
+				}
+				else if(strcmp(nvram_safe_get(tmp), value)) {
 					nvram_set(tmp, value);
 					nvram_modified = 1;
 					_dprintf("set %s=%s\n", tmp, value);
@@ -4787,7 +4821,7 @@ int validate_apply(webs_t wp, json_object *root)
 			}
 			else if(!strncmp(name, "vpn_crt_server_", 15) && unit!=-1) {
 				ovpn_key_t key_type;
-				char buf[4096];
+				char buf[8000];
 
 				snprintf(prefix, sizeof(prefix), "vpn_crt_server%d_", unit);
 				(void)strlcat_r(prefix, name+15, tmp, sizeof(tmp));
@@ -4807,6 +4841,9 @@ int validate_apply(webs_t wp, json_object *root)
 				else if(!strcmp(name+15, "crl")) {
 					key_type = OVPN_SERVER_CRL;
 				}
+				else if(!strcmp(name+15, "extra")) {
+					key_type = OVPN_SERVER_EXTRA;
+				}
 				else if(!strcmp(name+15, "dh")) {
 					key_type = OVPN_SERVER_DH;
 				}
@@ -4818,14 +4855,14 @@ int validate_apply(webs_t wp, json_object *root)
 				get_ovpn_key(OVPN_TYPE_SERVER, unit, key_type, buf, sizeof(buf));
 
 				if(strcmp(buf, value)) {
-					set_ovpn_key(OVPN_TYPE_SERVER, unit, key_type, buf, NULL);
+					set_ovpn_key(OVPN_TYPE_SERVER, unit, key_type, value, NULL);
 					nvram_modified = 1;
 					_dprintf("set %s=%s\n", tmp, value);
 				}
 			}
 			else if(!strncmp(name, "vpn_crt_client_", 15) && unit!=-1) {
 				ovpn_key_t key_type;
-				char buf[4096];
+				char buf[8000];
 
 				snprintf(prefix, sizeof(prefix), "vpn_crt_client%d_", unit);
 				(void)strlcat_r(prefix, name+15, tmp, sizeof(tmp));
@@ -4845,6 +4882,9 @@ int validate_apply(webs_t wp, json_object *root)
 				else if(!strcmp(name+15, "crl")) {
 					key_type = OVPN_CLIENT_CRL;
 				}
+				else if(!strcmp(name+15, "extra")) {
+					key_type = OVPN_CLIENT_EXTRA;
+				}
 				else {
 					_dprintf("unknown key type %s\n", name);
 					continue;
@@ -4853,10 +4893,13 @@ int validate_apply(webs_t wp, json_object *root)
 				get_ovpn_key(OVPN_TYPE_CLIENT, unit, key_type, buf, sizeof(buf));
 
 				if(strcmp(buf, value)) {
-					set_ovpn_key(OVPN_TYPE_CLIENT, unit, key_type, buf, NULL);
+					set_ovpn_key(OVPN_TYPE_CLIENT, unit, key_type, value, NULL);
 					nvram_modified = 1;
 					_dprintf("set %s=%s\n", tmp, value);
 				}
+			}
+			else if (!strcmp(name, "vpndirector_rulelist")) {
+				amvpn_set_policy_rules(value);
 			}
 #endif
 #ifdef RTCONFIG_DISK_MONITOR
@@ -16955,7 +16998,7 @@ do_vpnupload_cgi(char *url, FILE *stream)
 		//websApply(stream, "OvpnChecking.asp");
 
 		if(!strcmp(filetype, "ovpn")) {
-			reset_ovpn_setting(OVPN_TYPE_CLIENT, unit);
+			reset_ovpn_setting(OVPN_TYPE_CLIENT, unit, 0);
 			ret = read_config_file(VPN_CLIENT_UPLOAD, unit);
 			if (ret < 0)
 				nvram_set("vpn_upload_state", "err");
@@ -27231,13 +27274,20 @@ do_upload_wgc_config_cgi(char *url, FILE *stream)
 	int ret;
 	char *wgc_upload_unit = nvram_safe_get("wgc_upload_unit");
 	long unit;
+	char *end;
+
+	nvram_set("wgc_upload_state", "err");
 
 	if(*wgc_upload_unit == '\0') {
 		unlink(WGC_CONFIG_FILE);
 		return;
 	}
 
-	unit = strtol(wgc_upload_unit, NULL, 0);
+	unit = strtol(wgc_upload_unit, &end, 10);
+	if (end == wgc_upload_unit || *end || unit < 1 || unit > WG_CLIENT_MAX) {
+		unlink(WGC_CONFIG_FILE);
+		return;
+	}
 
 #ifdef RTCONFIG_HTTPS
 	if(do_ssl)
@@ -28163,7 +28213,7 @@ struct mime_handler mime_handlers[] =
 	{ "captcha.gif", "image/gif", no_cache_IE7, NULL, do_captcha_file, NULL },
 #endif
 #ifdef RTCONFIG_WIREGUARD
-	{ "wgs_client.png", "image/png", no_cache_IE7, NULL, do_wgs_client_png, NULL },
+	{ "wgs_client.png", "image/png", no_cache_IE7, NULL, do_wgs_client_png, do_auth },
 	{ "wgs_client.conf", "application/octet-stream", NULL, NULL, do_wgs_client_conf, do_auth },
 	{ "upload_wgc_config.cgi*", "text/html", no_cache_IE7, do_upload_wgc_config_post, do_upload_wgc_config_cgi, do_auth },
 #endif

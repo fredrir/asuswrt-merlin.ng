@@ -3438,3 +3438,8 @@ config RTCONFIG_DELAY_COMMIT
 config RTCONFIG_EXTEND_MTK_RFB_CONFIG
 	bool "extend parameters that is not set from mt799X.bY.dat to bandY.dat"
 	default n
+
+config RTCONFIG_VPN_FUSION_MERLIN
+	bool "Merlin VPN Fusion integration"
+	depends on RTCONFIG_VPN_FUSION
+	default n

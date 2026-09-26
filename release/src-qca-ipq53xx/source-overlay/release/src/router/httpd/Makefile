@@ -240,8 +240,8 @@ LIBS += -L$(TOP)/openssl -lssl -lcrypto -ldl
 endif
 
 ifeq ($(RTCONFIG_OPENVPN),y)
-CFLAGS += -I$(TOP)/libvpn
-LIBS += -L$(TOP)/libvpn -lvpn
+CFLAGS += -I$(TOP)/libovpn
+LIBS += -L$(TOP)/libovpn -lovpn
 LIBS += -L$(TOP)/openssl -lssl -lcrypto -ldl
 endif
 

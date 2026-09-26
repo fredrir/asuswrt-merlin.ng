@@ -3105,6 +3105,9 @@ start_default_filter(int lanunit)
 		  "--log-tcp-sequence --log-tcp-options --log-ip-options\n"
 		  "-A logdrop -j DROP\n");
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	amvpn_write_ipv6_killswitch(fp);
+#endif
 	fprintf(fp, "COMMIT\n\n");
 	fclose(fp);
 
@@ -6168,6 +6171,9 @@ TRACE_PT("write wl filter\n");
 	{
 		// extra filter
 		write_extra_filter6(fp_ipv6);
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+		amvpn_write_ipv6_killswitch(fp_ipv6);
+#endif
 
 		fprintf(fp_ipv6, "COMMIT\n\n");
 		if (fp_ipv6) fclose(fp_ipv6);
@@ -7975,6 +7981,9 @@ TRACE_PT("write wl filter\n");
 	{
 		// extra filter
 		write_extra_filter6(fp_ipv6);
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+		amvpn_write_ipv6_killswitch(fp_ipv6);
+#endif
 
 		fprintf(fp_ipv6, "COMMIT\n\n");
 		if (fp_ipv6) fclose(fp_ipv6);
@@ -9483,7 +9492,7 @@ add_mtwan:
 #endif
 
 #ifdef RTCONFIG_OPENVPN
-	run_ovpn_fw_scripts();
+	ovpn_run_fw_scripts();
 #endif
 
 	if (!nvram_get_int("ttl_inc_enable") && !nvram_get_int("ttl_spoof_enable")) {
@@ -9530,6 +9539,7 @@ add_mtwan:
 
 leave:
 	file_unlock(lock);
+	run_custom_script("firewall-start", 0, wan_if, NULL);
 
 	return 0;
 }

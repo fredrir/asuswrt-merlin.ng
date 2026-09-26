@@ -589,7 +589,10 @@ start_igmpproxy(char *wan_ifname)
 		wan_ifname, *altnet ? altnet : "0.0.0.0/0",
 		nvram_get("lan_ifname") ? : "br0");
 
+	append_custom_config("igmpproxy.conf", fp);
 	fclose(fp);
+	use_custom_config("igmpproxy.conf", igmpproxy_conf);
+	run_postconf("igmpproxy", igmpproxy_conf);
 
 	eval("/usr/sbin/igmpproxy", igmpproxy_conf);
 #endif
@@ -794,6 +797,42 @@ void update_wan_state(char *prefix, int state, int reason)
 	else if(state == WAN_STATE_STOPPING) {
 		snprintf(tmp, sizeof(tmp), "/var/run/ppp-wan%d.status", unit);
 		unlink(tmp);
+	}
+
+	sprintf(tmp,"%d", unit);
+
+	switch (state) {
+	case WAN_STATE_INITIALIZING:
+		strcpy(tmp1, "init");
+		break;
+	case WAN_STATE_CONNECTING:
+		strcpy(tmp1, "connecting");
+		break;
+	case WAN_STATE_CONNECTED:
+		strcpy(tmp1, "connected");
+		break;
+	case WAN_STATE_DISCONNECTED:
+		strcpy(tmp1, "disconnected");
+		break;
+	case WAN_STATE_STOPPED:
+		strcpy(tmp1, "stopped");
+		break;
+	case WAN_STATE_DISABLED:
+		strcpy(tmp1, "disabled");
+		break;
+	case WAN_STATE_STOPPING:
+		strcpy(tmp1, "stopping");
+		break;
+	default:
+		sprintf(tmp1, "state %d", state);
+	}
+
+	run_custom_script("wan-event", 0, tmp, tmp1);
+
+	/* For backward/legacy compatibility */
+	if (state == WAN_STATE_CONNECTED) {
+		sprintf(tmp,"%c",prefix[3]);
+		run_custom_script("wan-start", 0, tmp, NULL);
 	}
 }
 
@@ -3023,6 +3062,10 @@ int update_resolvconf(void)
 		nvram_match(ipv6_nvname("ipv6_only"), "1"))
 		goto NOIP;
 #endif
+
+#if defined(RTCONFIG_OPENVPN) && (!defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN))
+	write_ovpn_resolv_dnsmasq(fp_servers);
+#endif
 	{
 		for (unit = WAN_UNIT_FIRST; unit < WAN_UNIT_MAX; unit++) {
 			snprintf(prefix, sizeof(prefix), "wan%d_", unit);
@@ -3035,7 +3078,7 @@ int update_resolvconf(void)
 #ifdef RTCONFIG_DUALWAN
 			/* skip disconnected WANs in LB mode */
 			if (nvram_match("wans_mode", "lb")) {
-				if (!is_phy_connect(unit))
+				if (!is_phy_connect2(unit))
 					continue;
 			} else
 			/* skip non-primary WANs except not fully connected in FB mode */
@@ -3060,15 +3103,11 @@ int update_resolvconf(void)
 				if (dnspriv_enable)
 					break;
 #endif
-#if defined(RTCONFIG_OPENVPN) && !defined(RTCONFIG_VPN_FUSION)
-				if (write_ovpn_resolv_dnsmasq(fp_servers))
-					break;
-#endif
-#if defined(RTCONFIG_WIREGUARD) && !defined(RTCONFIG_VPN_FUSION)
-				if (write_wgc_resolv_dnsmasq(fp_servers))
-					break;
-#endif
-#if defined(RTCONFIG_IPSEC) && !defined(RTCONFIG_VPN_FUSION)
+//#if defined(RTCONFIG_WIREGUARD) && !defined(RTCONFIG_VPN_FUSION)
+//				if (write_wgc_resolv_dnsmasq(fp_servers))
+//					break;
+//#endif
+#if defined(RTCONFIG_IPSEC) && (!defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN))
 				if (write_ipc_resolv_dnsmasq(fp_servers))
 					break;
 #endif
@@ -3077,13 +3116,18 @@ int update_resolvconf(void)
 				if (nvram_match("wans_mode", "lb") && !*wan_dns)
 					break;
 #endif
+#ifdef RTCONFIG_OPENVPN
+				/* We have a client with DNS set to Exclusive and routing set to All */
+				if (ovpn_skip_dnsmasq())
+					break;
+#endif
 #if defined(RTCONFIG_MULTILAN_CFG) && defined(RTCONFIG_MULTIWAN_IF)
 				if (write_sdnlan_resolv_dnsmasq(fp_servers))
 					break;
 #endif
 				foreach(tmp, (*wan_dns ? wan_dns : wan_xdns), next)
 				{
- 					fprintf(fp_servers, "server=%s\n", tmp);
+					fprintf(fp_servers, "server=%s\n", tmp);
 				}
 			} while (0);
 
@@ -3145,11 +3189,10 @@ int update_resolvconf(void)
 	}
 #endif
 #ifdef RTCONFIG_DNSPRIVACY
-	if (dnspriv_enable) {
-		fprintf(fp, "nameserver %s\n", "127.0.1.1");
+	if (dnspriv_enable)
 		fprintf(fp_servers, "server=%s\n", "127.0.1.1");
-	}
 #endif
+
 #if (defined(RTAX82_XD6) || defined(RTAX82_XD6S) || defined(XD6_V2) || defined(ET12))
 NOIP:
 #endif
@@ -3235,15 +3278,24 @@ NOIP:
 
 	file_unlock(lock);
 
-#ifdef RTCONFIG_VPN_FUSION
+#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
 	if (is_vpnc_dns_active())
 		vpnc_update_resolvconf(nvram_get_int("vpnc_default_wan"));
 #endif
 
+#ifdef RTCONFIG_OPENVPN
+	if (ovpn_need_dnsmasq_restart())
 #ifdef RTCONFIG_MULTILAN_CFG
-	reload_dnsmasq(LAN_IN_SDN_IDX);
+		start_dnsmasq(ALL_SDN);	// add strict-order
 #else
-	reload_dnsmasq();
+		start_dnsmasq();	// add strict-order
+#endif
+	else
+#endif
+#ifdef RTCONFIG_MULTILAN_CFG
+		reload_dnsmasq(LAN_IN_SDN_IDX);
+#else
+		reload_dnsmasq();
 #endif
 	return 0;
 
@@ -4294,7 +4346,7 @@ NOIP:
 	}
 #endif
 
-#ifdef RTCONFIG_VPN_FUSION
+#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
 	vpnc_set_internet_policy(1);
 #endif
 
@@ -4374,13 +4426,13 @@ NOIP:
 #endif
 
 #ifdef RTCONFIG_OPENVPN
-#ifndef RTCONFIG_VPN_FUSION
-	start_ovpn_clientall();
+#if !defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN)
+	start_ovpn_eas();
 #endif
 	start_ovpn_serverall();
 #endif
 #ifdef RTCONFIG_VPNC
-#ifdef RTCONFIG_VPN_FUSION
+#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
 	start_vpnc();
 #else
 	if((nvram_match("vpnc_proto", "pptp") || nvram_match("vpnc_proto", "l2tp")) && nvram_match("vpnc_auto_conn", "1"))
@@ -4397,7 +4449,7 @@ NOIP:
 #endif
 
 #ifdef RTCONFIG_WIREGUARD
-#ifndef RTCONFIG_VPN_FUSION
+#if !defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN)
 	stop_wgcall();
 	start_wgcall();
 #endif
@@ -4734,7 +4786,7 @@ wan_down(char *wan_ifname)
 #ifdef RTCONFIG_LANTIQ
 	disable_ppa_wan(wan_ifname);
 #endif
-#ifdef RTCONFIG_VPN_FUSION
+#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
 	vpnc_set_internet_policy(0);
 #endif
 #ifdef RTCONFIG_MULTIWAN_IF
@@ -5217,7 +5269,7 @@ start_wan(void)
 	symlink("/sbin/rc", "/tmp/ppp/vpnc-ip-down");
 	symlink("/sbin/rc", "/tmp/ppp/vpnc-ip-pre-up");
 	symlink("/sbin/rc", "/tmp/ppp/vpnc-auth-fail");
-#ifdef RTCONFIG_VPN_FUSION
+#if defined(RTCONFIG_VPN_FUSION) && !defined(RTCONFIG_VPN_FUSION_MERLIN)
 	if(!d_exists("/etc/openvpn")) {
 		mkdir("/etc/openvpn", 0700);
 	}

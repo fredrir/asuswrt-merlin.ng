@@ -218,6 +218,7 @@ void start_ubifs(void)
 	if ((statfs(UBIFS_MNT_DIR, &sf) == 0)
 	    && (sf.f_type != 0x73717368 /* squashfs */ )) {
 		// already mounted
+		setup_jffs_dirs();
 		notice_set("ubifs", format ? "Formatted" : "Loaded");
 #if defined(RTCONFIG_HND_ROUTER_AX_6756) || defined(RTCONFIG_HND_ROUTER_BE_4916)
 		goto skip_mnt;
@@ -293,6 +294,7 @@ skip_mnt:
 	}
 
 	userfs_prepare(UBIFS_MNT_DIR);
+	setup_jffs_dirs();
 
 	notice_set("ubifs", format ? "Formatted" : "Loaded");
 

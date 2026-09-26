@@ -553,7 +553,7 @@ int build_temp_rootfs(const char *newroot)
 #if defined(RTCONFIG_HND_ROUTER_AX)
 			     " libwpa_client.so* libsqlite3.so.0*"
 #endif
-			     " libjson-c.so.2* libasc.so* libvpn.so*"
+			     " libjson-c.so.2* libasc.so* libovpn.so*"
 #if defined(RTCONFIG_HNS)
 			     " libhns.so"
 #endif
@@ -708,7 +708,7 @@ int build_temp_rootfs(const char *newroot)
 	}
 #endif
 #if defined(RTCONFIG_OPENVPN)
-	__cp("", "/usr/lib", "libvpn.so", newroot);
+	__cp("", "/usr/lib", "libovpn.so", newroot);
 	if (nvram_match("VPNServer_enable", "1")) {
 		__cp("", "/usr/sbin", "openvpn", newroot);
 		__cp("", "/usr/lib", "libz.so* liblzo2.so* liblz4.so*", newroot);
@@ -1058,7 +1058,9 @@ void create_passwd(void)
 		fappend(fp, "/etc/shadow.chilli");
 		fappend(fp, "/etc/shadow.chilli-cp");
 #endif
+		append_custom_config("shadow", fp);
 		fclose(fp);
+		run_postconf("shadow","/etc/shadow");
 		chmod("/etc/shadow", 0600);
 	}
 
@@ -1078,7 +1080,9 @@ void create_passwd(void)
 #endif
 		);
 		fappend(fp, "/etc/gshadow.custom");
+		append_custom_config("gshadow", fp);
 		fclose(fp);
+		run_postconf("gshadow", "/etc/gshadow");
 		chmod("/etc/gshadow", 0600);
 	}
 
@@ -1097,10 +1101,12 @@ void create_passwd(void)
 		fprintf(fp, "tor:x:65533:65533:tor:/dev/null:/dev/null\n");
 #endif
 		fappend(fp, "/etc/passwd.custom");
+		append_custom_config("passwd", fp);
 		fclose(fp);
 #ifdef RTCONFIG_OPENVPN
-		append_ovpn_accnt("/etc/passwd", "/etc/passwd.openvpn");
+		fappend_file("/etc/passwd", "/etc/passwd.openvpn");
 #endif
+		run_postconf("passwd", "/etc/passwd");
 		chmod("/etc/passwd", 0644);
 	}
 
@@ -1120,7 +1126,9 @@ void create_passwd(void)
 #endif
 		);
 		fappend(fp, "/etc/group.custom");
+		append_custom_config("group", fp);
 		fclose(fp);
+		run_postconf("group", "/etc/group");
 		chmod("/etc/group", 0644);
 	}
 
@@ -1610,7 +1618,11 @@ void start_dnsmasq(void)
 			}
 		}
 #endif
+		append_custom_config("hosts", fp);
 		fclose(fp);
+		use_custom_config("hosts", "/etc/hosts");
+		run_postconf("hosts","/etc/hosts");
+		chmod("/etc/hosts", 0644);
 	} else
 		perror("/etc/hosts");
 
@@ -2229,7 +2241,11 @@ void start_dnsmasq(void)
 	fprintf(fp, "edns-packet-max=1232\n");
 
 	/* close fp move to the last */
+	append_custom_config("dnsmasq.conf", fp);
 	fclose(fp);
+	use_custom_config("dnsmasq.conf", "/etc/dnsmasq.conf");
+	run_postconf("dnsmasq", "/etc/dnsmasq.conf");
+	chmod("/etc/dnsmasq.conf", 0644);
 
 	/* Create resolv.conf with empty nameserver list */
 	f_write(dmresolv, NULL, 0, FW_APPEND, 0666);
@@ -2497,7 +2513,10 @@ void start_stubby(void)
 	if (nv)
 		free(nv);
 
+	append_custom_config("stubby.yml", fp);
 	fclose(fp);
+//	use_custom_config("stubby.yml", (char *)stubby_config);
+	run_postconf("stubby", (char *)stubby_config);
 	chmod(stubby_config, 0644);
 
 	if (nvram_get_int("stubby_debug")) {
@@ -5447,7 +5466,13 @@ start_ddns(char *caller, int isAidisk)
 			if(nvram_get_int("ddns_ipv6_update") && (strncmp(server, "WWW.DYNDNS.ORG", 14) == 0))
 				fprintf(fp, "allow-ipv6 = true\n");
 #endif
+
+			append_custom_config("inadyn.conf", fp);
+
 			fclose(fp);
+
+			use_custom_config("inadyn.conf", "/etc/inadyn.conf");
+			run_postconf("inadyn", "/etc/inadyn.conf");
 
 #if defined(RTCONFIG_TUNNEL) && defined(RTCONFIG_ACCOUNT_BINDING)
 			if(is_account_bound() && nvram_match("ddns_replace_status", "1") &&
@@ -5497,6 +5522,7 @@ stop_ddns(void)
 	if (nvram_match("ddns_tunbkrnet", "1")) {
 		int evalRet = eval("iptables-restore", "/tmp/filter_rules");
 		rule_apply_checking("services", __LINE__, "/tmp/filter_rules", evalRet);
+		run_custom_script("firewall-start", 0, get_wan_ifname(wan_primary_ifunit()), NULL);
 		nvram_unset("ddns_tunbkrnet");
 	}
 #ifdef RTCONFIG_OPENVPN
@@ -7493,9 +7519,12 @@ void start_upnp(void)
 					fprintf(f, "allow 1024-65535 %s/%s 1024-65535\n", lanip, lanmask);
 				}
 
+				append_custom_config("upnp", f);
 				fappend(f, "/etc/upnp/config.custom");
 				fprintf(f, "\ndeny 0-65535 0.0.0.0/0 0-65535\n");
 				fclose(f);
+				use_custom_config("upnp", "/etc/upnp/config");
+				run_postconf("upnp", "/etc/upnp/config");
 				xstart("miniupnpd", "-f", "/etc/upnp/config");
 #ifdef RTCONFIG_AUPNPC
 				start_aupnpc();
@@ -7801,7 +7830,10 @@ int generate_mdns_config(void)
 	fprintf(fp, "rlimit-stack=4194304\n");
 	fprintf(fp, "rlimit-nproc=3\n");
 
+	append_custom_config(AVAHI_CONFIG_FN, fp);
 	fclose(fp);
+	use_custom_config(AVAHI_CONFIG_FN, avahi_config);
+	run_postconf("avahi-daemon", avahi_config);
 
 	return ret;
 }
@@ -7833,7 +7865,10 @@ int generate_afpd_service_config(void)
 	fprintf(fp, "</service>\n");
 	fprintf(fp, "</service-group>\n");
 
+	append_custom_config(AVAHI_AFPD_SERVICE_FN, fp);
 	fclose(fp);
+	use_custom_config(AVAHI_AFPD_SERVICE_FN, afpd_service_config);
+	run_postconf("afpd", afpd_service_config);
 
 	return ret;
 }
@@ -7861,7 +7896,10 @@ int generate_adisk_service_config(void)
 	fprintf(fp, "</service>\n");
 	fprintf(fp, "</service-group>\n");
 
+	append_custom_config(AVAHI_ADISK_SERVICE_FN, fp);
 	fclose(fp);
+	use_custom_config(AVAHI_ADISK_SERVICE_FN, adisk_service_config);
+	run_postconf("adisk", adisk_service_config);
 
 	return ret;
 }
@@ -7894,7 +7932,10 @@ int generate_itune_service_config(void)
 	fprintf(fp, "</service>\n");
 	fprintf(fp, "</service-group>\n");
 
+	append_custom_config(AVAHI_ITUNE_SERVICE_FN, fp);
 	fclose(fp);
+	use_custom_config(AVAHI_ITUNE_SERVICE_FN, itune_service_config);
+	run_postconf("mt-daap", itune_service_config);
 
 	return ret;
 }
@@ -12951,12 +12992,16 @@ start_services(void)
 	start_poemon();
 #endif
 #endif
+	run_custom_script("services-start", 0, NULL, NULL);
+
 	return 0;
 }
 
 void
 stop_services(void)
 {
+	run_custom_script("services-stop", 0, NULL, NULL);
+
 #ifdef RTCONFIG_FSMD
 	killall_tk("fsmd");
 #endif
@@ -15164,7 +15209,7 @@ void restart_qos_if_bwlim_enabled(void)
 void handle_notifications(void)
 {
 	char nv[256], nvtmp[32], *cmd[8], *script;
-	char *nvp, *b, *nvptr;
+	char *nvp, *b, *nvptr, *actionstr;
 	int action = 0;
 	int count;
 	int i;
@@ -15185,6 +15230,7 @@ void handle_notifications(void)
 	strlcpy(nv, nvram_safe_get("rc_service"), sizeof(nv));
 	nvptr = nv;
 again:
+	action = 0;
 	nvp = strsep(&nvptr, ";");
 	//_dprintf("chk nv=%s, nvp=%s, rc_service=%s\n", nv, nvp, nvram_safe_get("rc_service"));
 
@@ -15206,18 +15252,22 @@ again:
 
 	if(strncmp(cmd[0], "start_", 6)==0) {
 		action |= RC_SERVICE_START;
+		actionstr = "start";
 		script = &cmd[0][6];
 	}
 	else if(strncmp(cmd[0], "stop_", 5)==0) {
 		action |= RC_SERVICE_STOP;
+		actionstr = "stop";
 		script = &cmd[0][5];
 	}
 	else if(strncmp(cmd[0], "restart_", 8)==0) {
 		action |= (RC_SERVICE_START | RC_SERVICE_STOP);
+		actionstr = "restart";
 		script = &cmd[0][8];
 	}
 	else {
 		action = 0;
+		actionstr = "";
 		script = cmd[0];
 	}
 
@@ -15225,6 +15275,8 @@ again:
 	if(!strstr(script, "autowan")) // remove noise of autowan in wanduck
 #endif
 	TRACE_PT("running: %d %s\n", action, script);
+
+	run_custom_script("service-event", 120, actionstr, script);
 
 #ifdef RTCONFIG_USB_MODEM
 	if(!strcmp(script, "simauth")
@@ -19972,6 +20024,49 @@ retry_wps_enr:
 		if (action & RC_SERVICE_STOP) stop_ovpn_server(atoi(&script[9]));
 		if (action & RC_SERVICE_START) start_ovpn_server(atoi(&script[9]));
 	}
+	else if (strncmp(script, "vpnrouting" ,10) == 0) {
+		int unit, lock;
+
+		if (action & RC_SERVICE_START) {
+			if (strlen(script) >= 11)
+				unit = atoi(&script[10]);
+			else
+				unit = 0;
+
+			lock = file_lock(VPNROUTING_LOCK);
+			if (unit == 0) {
+				amvpn_set_wan_routing_rules();
+#ifdef RTCONFIG_WIREGUARD
+				for (i = WG_CLIENT_MAX; i > 0; i--) {
+					amvpn_set_killswitch_rules(VPNDIR_PROTO_WIREGUARD, i, NULL);
+					amvpn_set_routing_rules(i, VPNDIR_PROTO_WIREGUARD);
+					amvpn_clear_exclusive_dns(i, VPNDIR_PROTO_WIREGUARD);
+					wgc_set_exclusive_dns(i);
+				}
+#if defined(RTCONFIG_HND_ROUTER_AX_6756) || defined(RTCONFIG_BCM_502L07P2) || defined(RTCONFIG_HND_ROUTER_AX_675X)
+				amvpn_refresh_wg_bypass_rules();
+#endif
+#endif
+				for (i = OVPN_CLIENT_MAX; i > 0; i--) {
+					amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, i, NULL);
+					amvpn_set_routing_rules(i, VPNDIR_PROTO_OPENVPN);
+					amvpn_clear_exclusive_dns(i, VPNDIR_PROTO_OPENVPN);
+					ovpn_set_exclusive_dns(i);
+				}
+			} else {
+				// unit-specific only called for OpenVPN for now
+				// NOTE: doing it for a single WGC would mess with other bypass rules
+				amvpn_set_wan_routing_rules();
+				amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, unit, NULL);
+				amvpn_set_routing_rules(unit, VPNDIR_PROTO_OPENVPN);
+				amvpn_clear_exclusive_dns(unit, VPNDIR_PROTO_OPENVPN);
+				ovpn_set_exclusive_dns(unit);
+				// Refresh prerouting rules to ensure correct order
+				amvpn_update_exclusive_dns_rules();
+			}
+			file_unlock(lock);
+		}
+	}
 #endif
 #if defined(RTCONFIG_PPTPD) || defined(RTCONFIG_ACCEL_PPTPD)
 	else if (strcmp(script, "vpnd") == 0 || strcmp(script, "pptpd") == 0) {
@@ -20008,6 +20103,16 @@ retry_wps_enr:
 			stop_dnsmasq(ALL_SDN);
 #else
 			stop_dnsmasq();
+	else if (strcmp(script, "clearovpnserver") == 0)
+	{
+		if (cmd[1])
+			reset_ovpn_setting(OVPN_TYPE_SERVER, atoi(cmd[1]), 1);
+	}
+        else if (strcmp(script, "clearovpnclient") == 0)
+	{
+		if (cmd[1])
+			reset_ovpn_setting(OVPN_TYPE_CLIENT, atoi(cmd[1]), 1);
+	}
 #endif
 		}
 		if (action & RC_SERVICE_START) {
@@ -21350,6 +21455,8 @@ _dprintf("test 2. turn off the USB power during %d seconds.\n", reset_seconds[re
 	}
 
 skip:
+	run_custom_script("service-event-end", 0, actionstr, script);
+
 	if(nvptr && strlen(nvptr)){
 _dprintf("goto again(%d)...\n", getpid());
 		goto again;
@@ -22421,7 +22528,7 @@ _dprintf("nat_rule: the nat rule file was not ready. wait %d seconds...\n", retr
 #endif
 
 #ifdef RTCONFIG_OPENVPN
-	run_ovpn_fw_nat_scripts();
+	ovpn_run_fw_nat_scripts();
 #endif
 #ifdef RTCONFIG_WIREGUARD
 	run_wgs_fw_nat_scripts();
@@ -22435,6 +22542,8 @@ _dprintf("nat_rule: the nat rule file was not ready. wait %d seconds...\n", retr
 
 	setup_ct_timeout(TRUE);
 	setup_udp_timeout(TRUE);
+
+	run_custom_script("nat-start", 0, NULL, NULL);
 
 	return NAT_STATE_NORMAL;
 }

@@ -62,7 +62,7 @@ void run_custom_script(char *name, int timeout, char *arg1, char *arg2)
 	snprintf(script, sizeof(script), "/jffs/scripts/%s", name);
 
 	if (!stat(script, &st)) {
-		if (nvram_match("jffs2_scripts", "0"))
+		if (!nvram_match("jffs2_scripts", "1"))
 			error = "custom script execution is disabled!";
 		else if (!(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)))
 			error = "script is not set executable!";
@@ -70,14 +70,21 @@ void run_custom_script(char *name, int timeout, char *arg1, char *arg2)
 			error = NULL;
 
 		if (error) {
+#if defined(RTCONFIG_AUTO_WANPORT) && !defined(RTCONFIG_BCM_MFG)
+			if(!(!strncmp(name, "service-event",13) && strstr((arg2 ? arg2 : ""), "autowan"))) // remove noise of autowan in wanduck
+#endif
 			logmessage("custom_script", "Found %s, but %s", name, error);
 			return;
 		}
 
-		if (arg1)
+		if (arg1) {
+#if defined(RTCONFIG_AUTO_WANPORT) && !defined(RTCONFIG_BCM_MFG)
+			if(!(!strncmp(name, "service-event",13) && strstr((arg2 ? arg2 : ""), "autowan"))) // remove noise of autowan in wanduck
+#endif
 			logmessage("custom_script" ,"Running %s (args: %s%s%s)", script, arg1, (arg2 ? " " : ""), (arg2 ? arg2 : ""));
-		else
+		} else {
 			logmessage("custom_script" ,"Running %s", script);
+		}
 
 		cmd[0] = script;
 		cmd[1] = arg1;
@@ -104,7 +111,7 @@ void use_custom_config(char *config, char *target)
         snprintf(filename, sizeof(filename), "/jffs/configs/%s", config);
 
 	if (f_exists(filename)) {
-		if (nvram_match("jffs2_scripts", "0")) {
+		if (!nvram_match("jffs2_scripts", "1")) {
 			logmessage("custom config", "Found %s, but custom configs are disabled!", filename);
 			return;
 		}
@@ -121,7 +128,7 @@ void append_custom_config(char *config, FILE *fp)
 	snprintf(filename, sizeof(filename), "/jffs/configs/%s.add", config);
 
 	if (f_exists(filename)) {
-		if (nvram_match("jffs2_scripts", "0")) {
+		if (!nvram_match("jffs2_scripts", "1")) {
 			logmessage("custom config", "Found %s, but custom configs are disabled!", filename);
 			return;
 		}
@@ -130,3 +137,9 @@ void append_custom_config(char *config, FILE *fp)
 	}
 }
 
+void setup_jffs_dirs(void)
+{
+	if (!d_exists("/jffs/scripts/")) mkdir("/jffs/scripts/", 0755);
+	if (!d_exists("/jffs/configs/")) mkdir("/jffs/configs/", 0755);
+	if (!d_exists("/jffs/addons/")) mkdir("/jffs/addons/", 0755);
+}

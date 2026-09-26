@@ -6093,6 +6093,11 @@ int ecm_selection(void)
 {
 	int act = nvram_get_int("qca_sfe");	/* -1/0/otherwise: ignore/remove ecm/load ecm */
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	/* Keep experimental VPN policy and kill-switch traffic in the Linux path. */
+	act = 0;
+#endif
+
 	/* Don't load ecm if NAT is not enabled. */
 	if (!is_nat_enabled())
 		act = 0;

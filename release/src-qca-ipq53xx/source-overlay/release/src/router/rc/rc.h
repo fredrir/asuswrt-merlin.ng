@@ -76,6 +76,33 @@
 #ifdef RTCONFIG_OPENVPN
 #include "openvpn_config.h"
 #include "openvpn_control.h"
+#include <openvpn_setup.h>
+#include <amvpn_routing.h>
+extern void create_ovpn_passwd(void);
+extern int legacy_start_vpnc(void);
+extern void legacy_stop_vpnc(void);
+extern int legacy_vpnc_ipup_main(int argc, char **argv);
+extern int legacy_vpnc_ipdown_main(int argc, char **argv);
+extern int legacy_vpnc_ippreup_main(int argc, char **argv);
+extern int legacy_vpnc_authfail_main(int argc, char **argv);
+extern void legacy_vpnc_add_firewall_rule(void);
+extern void legacy_update_vpnc_state(char *prefix, int state, int reason);
+
+extern void vpnc_ovpn_set_dns(int unit);
+extern void ovpn_up_handler(void);
+extern void ovpn_down_handler(void);
+extern void ovpn_route_up_handler(void);
+extern void ovpn_route_pre_down_handler(void);
+extern void start_ovpn_client(int unit);
+extern void stop_ovpn_client(int unit);
+extern void start_ovpn_server(int unit);
+extern void stop_ovpn_server(int unit);
+extern void start_ovpn_eas(void);
+extern void stop_ovpn_eas(void);
+extern int _gen_vpnc_resolv_conf(int vpnc_idx);
+extern void _vpnc_ipset_create(int vpnc_idx);
+extern void _vpnc_ipset_destroy(int vpnc_idx);
+
 #endif
 
 #ifdef RTCONFIG_PARENTALCTRL
@@ -1912,7 +1939,7 @@ extern void run_ipsec_firewall_scripts(void);
 extern char *get_virtual_subnet(char *nvram_name, char *output, int _size);
 extern int ipsec_updown_main(int argc, char *argv[]);
 extern void rc_ipsec_ctrl(int prof_type, int prof_idx, int enable);
-#ifndef RTCONFIG_VPN_FUSION
+#if !defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_VPN_FUSION_MERLIN)
 extern int write_ipc_resolv_dnsmasq(FILE* fp_servers);
 #endif
 extern void update_ipsec_s2sc_conf();
@@ -2426,6 +2453,7 @@ extern int vpnc_set_dev_policy_rule();
 #endif
 
 // ovpn.c
+extern void run_ovpn_event_script(void);
 extern int ovpn_up_main(int argc, char **argv);
 extern int ovpn_down_main(int argc, char **argv);
 extern int ovpn_route_up_main(int argc, char **argv);

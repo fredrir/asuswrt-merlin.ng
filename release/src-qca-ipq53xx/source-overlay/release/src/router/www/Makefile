@@ -36,6 +36,8 @@ install:
 	# INSTALLDIR is $(INSTALLDIR)/www here
 	mkdir -p $(INSTALLDIR)
 	cp ../www $(INSTALLDIR)/. -rf
+	# Ignore host crash dumps left by older dictionary tools.
+	rm -f $(INSTALLDIR)/www/core $(INSTALLDIR)/www/core.[0-9]*
 ifeq ($(and $(HND_ROUTER),$(RTCONFIG_VISUALIZATION)),y)
 	install -m 644 $(VISPAGES) $(INSTALLDIR)/www
 endif # CONFIG_VISUALIZATION
@@ -538,6 +540,10 @@ endif
 
 ifeq ($(RTCONFIG_OPENVPN), y)
 	cd $(INSTALLDIR)/www && ln -sf ../etc/openvpn/server1/client.ovpn && cd $(TOP)/www
+ifeq ($(RTCONFIG_VPN_FUSION_MERLIN), y)
+	cd $(INSTALLDIR)/www && ln -sf ../etc/openvpn/server1/client.ovpn client1.ovpn
+	cd $(INSTALLDIR)/www && ln -sf ../etc/openvpn/server2/client.ovpn client2.ovpn
+endif
 else
 	rm -rf $(INSTALLDIR)/www/ajax_openvpn_server.asp
 	rm -rf $(INSTALLDIR)/www/Advanced_VPN_OpenVPN.asp
@@ -722,9 +728,11 @@ ifneq ($(RTCONFIG_WTFAST), y)
 	rm -rf $(INSTALLDIR)/www/images/wtfast_back_hover.svg
 	rm -rf $(INSTALLDIR)/www/images/wtfast_device.svg
 	rm -rf $(INSTALLDIR)/www/images/wtfast_point.gif
+ifneq ($(RTCONFIG_VPN_FUSION_MERLIN), y)
 	rm -rf $(INSTALLDIR)/www/images/New_ui/disable_hover.svg
 	rm -rf $(INSTALLDIR)/www/images/New_ui/enable.svg
 	rm -rf $(INSTALLDIR)/www/images/New_ui/enable_hover.svg
+endif
 	rm -rf $(INSTALLDIR)/www/images/New_ui/logout.svg
 	rm -rf $(INSTALLDIR)/www/images/New_ui/logout_hover.svg
 	rm -rf $(INSTALLDIR)/www/images/New_ui/upgrade.svg
