@@ -7,8 +7,9 @@ dev14 port (`0dd6c693e2f12bebde29d38b1cd6b0934cce5cad`) and labels this first
 native build `58138-rtbe90u-dev15-vpn`. Dev17 consolidates VPN, rc wrapper and
 script-hook code into the shared 3006 source tree. Dev18 repairs OpenVPN and
 WireGuard profile-reset service dispatch. Dev19 adds conservative, one-time
-Fusion profile and policy migration; the current dev20 candidate repairs
-policy-save persistence and publication failures.
+Fusion profile and policy migration. Dev20 repairs policy-save persistence and
+publication failures; the current dev21 candidate preserves IPv4 VPN protection
+during SDN refresh.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -501,11 +502,46 @@ comparisons (plus 32 expected rejections) passed. All 150,611 inputs are account
 for by independent assembly and Git-index checks. Only the version label,
 QCA HTTP apply source and shared policy writer changed among firmware inputs;
 existing non-QCA policy behavior remains unchanged. See
-[dev20 validation evidence](rt-be90u-dev20-validation.json) for exact identities
+[dev20 validation evidence](rt-be90u-dev20-validation.json) for exact identities.
+The clean hosted build and all six basic ARM suites passed; downloaded firmware
+and all 150,611 input records were verified. Both existing GT-BE98 build variants
+also passed. The network and tunnel suites remain local validation.
+
+## Dev21: preserve VPN protection during SDN refresh
+
+The compiled SDN refresh previously removed every IPv4 rule for the refreshed
+interface. WireGuard protection disappeared; OpenVPN also exposed brief gaps
+while rebuilding SDN and Director guards. A packet fixture against preserved
+dev20 reproduced 126 failures across 866 checks at 98 routing-command boundaries,
+including deletion of an unrelated custom route rule.
+
+QCA refresh now installs or retains the SDN guard before replacing only its
+owned VPN lookups. Director, global and custom rules survive the refresh.
+Assigned inferred guards use the SDN priority, so disabling enforcement releases
+the correct guard. Command failures retain installed protection and return an
+error; refresh serializes with the existing VPN routing service lock.
+
+The new fixture links actual compiled `sdn.o` with packaged VPN/shared libraries.
+It executes native routing commands in an isolated network namespace and pauses
+after each IPv4 rule mutation for packet probes. It covers OpenVPN1/index6 and
+WireGuard1/index1 on `br1`, explicit and inferred guard creation, repeated refresh,
+enable/enforce changes, unrelated routes, WAN exceptions, and failed guard/lookup
+installation followed by retry. WAN exceptions are checked with empty VPN tables;
+populated-table probes separately verify tunnel forwarding. NVRAM and independent
+firewall-generation calls are substitutes. This does not establish whole-router
+service orchestration.
+
+All 15 local runtime suites passed, including 772 SDN packet checks across 78
+routing-command boundaries (four injected failures). Image/linkage/content checks,
+independent assembly of all 150,611 inputs, Git-index accounting, script/config/event
+checks, 25 helper tests, 2,144 common-source comparisons and 32 invalid-profile
+rejections passed. Firmware
+input changes from dev20 are limited to the version, QCA `sdn.c` and shared
+`amvpn_routing.c`; checked non-QCA token behavior remains unchanged. See
+[dev21 validation evidence](rt-be90u-dev21-validation.json) for exact identities
 and hosted status.
 
-The next software milestone is compiled SDN refresh coverage with real packet
-probes. Current tests apply protection through library calls; they do not verify
-whether SDN refresh removes or restores WireGuard protection, nor safe routing
-and DNS behavior when migration defers incompatible stock indices. Recovery and
-hardware validation remain separate prerequisites; no router state was changed.
+Next coverage must address default-LAN/unassigned SDNs, multiple SDNs and
+concurrent callers, then safe routing and DNS when migration defers incompatible
+stock indices. Broader WAN/DNS/firewall transitions, IPv6 policy limitations,
+recovery and hardware validation remain outstanding. No router state was changed.
