@@ -14,7 +14,7 @@ def main():
     root = work / 'root'
     exports = work / 'exports.list'
     exports.write_text('{ nvram_get; nvram_set; nvram_unset; nvram_commit; '
-                       'logmessage; logmessage_normal; };\n')
+                       'logmessage; logmessage_normal; mkstemp; write; fsync; close; rename; };\n')
     objects = [Path('/work/release/src/router/rc') / (s + '.o') for s in ('init', 'format', 'vpn_migrate')]
     for obj in objects:
         print(obj.name, hashlib.sha256(obj.read_bytes()).hexdigest(), flush=True)
@@ -27,7 +27,7 @@ def main():
                    'sync_nc_conf', 'fsync', 'link'):
         command += ['-Wl,--wrap=' + symbol]
     command += ['-L/firmware/usr/lib', '-Wl,-rpath-link,/firmware/usr/lib:/firmware/lib',
-                '-lovpn', '-lshared', '-lnvram', '-o', str(root / 'tmp/migrate')]
+                '-lovpn', '-lshared', '-lnvram', '-ldl', '-o', str(root / 'tmp/migrate')]
     subprocess.run(command, check=True)
     run = ['chroot', str(root), '/qemu', '/tmp/migrate']
     backup = root / 'jffs/openvpn/fusion-migration.backup'
@@ -198,6 +198,39 @@ def main():
     assert policy.is_file() and policy.read_text() == ''
     assert call('read')[2] == ''
     print('PASS policy fallback, filesystem errors, explicit empty UI save and fallback retirement', flush=True)
+
+    replacement = '<1>Replacement>192.0.2.99>>WAN'
+    original = '<1>Existing>192.0.2.88>>OVPN2'
+    for existing in (None, original):
+        for fault in ('policy-parent-sync', 'policy-write', 'policy-partial', 'policy-zero', 'policy-fsync',
+                      'policy-close', 'policy-rename'):
+            seed(expected)
+            if existing is not None:
+                policy.write_text(existing)
+            state, report, rules = call('policy', fault=fault, argument=replacement)
+            assert report['result'] == -1 and report['commits'] == 0 and report['injected'] == 1, fault
+            assert state == expected and read_db(root / 'tmp/nvram.db') == expected, fault
+            assert rules == (expected['vpndirector_rulelist'] if existing is None else existing), fault
+            assert policy.exists() == (existing is not None), fault
+            if existing is not None:
+                assert policy.read_text() == existing, fault
+            assert not list(policy.parent.glob('.vpndirector_rulelist.*')), fault
+            assert call('read')[2] == rules, fault
+    # A directory-sync failure occurs after atomic publication: the complete
+    # new file may be visible, but fallback retirement must remain uncommitted.
+    seed(expected)
+    state, report, rules = call('policy', fault='policy-dir-sync', argument=replacement)
+    assert report['result'] == -1 and report['commits'] == 0 and report['injected'] == 1
+    assert state == expected and read_db(root / 'tmp/nvram.db') == expected
+    assert rules == replacement and policy.read_text() == replacement
+    assert not list(policy.parent.glob('.vpndirector_rulelist.*'))
+    state, report, rules = call('policy', argument=replacement)
+    assert report['result'] == 0 and report['commits'] == 1 and rules == replacement
+    assert 'vpndirector_rulelist' not in state and policy.stat().st_mode & 0o777 == 0o600
+    state, report, rules = call('policy', argument='')
+    assert report['result'] == 0 and report['commits'] == 1 and rules == '' and policy.read_text() == ''
+    assert call('read')[2] == ''
+    print('PASS atomic policy publication preserves fallback and existing policy on write failures', flush=True)
 
     for unit in range(1, 6):
         source = {'vpnc_clientlist': 'C>OpenVPN>%d>>>1>5<W>WireGuard>%d>>>0>6' % (unit, unit),

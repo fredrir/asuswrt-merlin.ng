@@ -4899,7 +4899,15 @@ int validate_apply(webs_t wp, json_object *root)
 				}
 			}
 			else if (!strcmp(name, "vpndirector_rulelist")) {
+#ifdef RTCONFIG_SOC_IPQ53XX
+				/* Publishing the migrated policy also retires its NVRAM fallback.
+				 * A policy-only Apply must commit that removal too. */
+				int had_fallback = *nvram_safe_get(name) != '\0';
+				if (!amvpn_set_policy_rules(value) && had_fallback)
+					nvram_modified = 1;
+#else
 				amvpn_set_policy_rules(value);
+#endif
 			}
 #endif
 #ifdef RTCONFIG_DISK_MONITOR

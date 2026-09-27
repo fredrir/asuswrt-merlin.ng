@@ -1,10 +1,13 @@
 /* Actual rc init/format/migration objects and packaged VPN libraries, QEMU only. */
 #include <assert.h>
 #include <errno.h>
+#include <dlfcn.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 #include <rtconfig.h>
 #include <bcmnvram.h>
 #include <shared.h>
@@ -17,6 +20,7 @@ extern void config_format_compatibility_handler(void);
 static struct { char *name, *value; } store[2048];
 static size_t used;
 static int active, sets, commits, injected, hooks, syncs;
+static int policy_operation, policy_fd = -1, policy_writes, policy_created, policy_published;
 static const char *fault = "";
 
 void fixture_unexpected(const char *name)
@@ -100,6 +104,63 @@ int __wrap_fsync(int fd)
 	return __real_fsync(fd);
 }
 
+/* Interpose calls from the packaged libovpn, not just linked rc objects. */
+int mkstemp(char *path)
+{
+	int (*real_mkstemp)(char *) = dlsym(RTLD_NEXT, "mkstemp");
+	int fd;
+	assert(real_mkstemp);
+	fd = real_mkstemp(path);
+	if (policy_operation) { policy_fd = fd; policy_created = fd >= 0; }
+	return fd;
+}
+
+ssize_t write(int fd, const void *buffer, size_t length)
+{
+	if (policy_operation && fd == policy_fd) {
+		++policy_writes;
+		if (!strcmp(fault, "policy-write") ||
+		    (!strcmp(fault, "policy-partial") && policy_writes > 1)) {
+			++injected; errno = ENOSPC; return -1;
+		}
+		if (!strcmp(fault, "policy-zero")) { ++injected; return 0; }
+		if (!strcmp(fault, "policy-partial") && length > 1) length /= 2;
+	}
+	return syscall(SYS_write, fd, buffer, length);
+}
+
+int fsync(int fd)
+{
+	if (policy_operation && ((!strcmp(fault, "policy-fsync") && fd == policy_fd) ||
+	    (!strcmp(fault, "policy-parent-sync") && !policy_created) ||
+	    (!strcmp(fault, "policy-dir-sync") && policy_published))) {
+		++injected; errno = EIO; return -1;
+	}
+	return syscall(SYS_fsync, fd);
+}
+
+int close(int fd)
+{
+	int was_policy = policy_operation && fd == policy_fd;
+	int result = syscall(SYS_close, fd);
+	if (was_policy) policy_fd = -1;
+	if (was_policy && !strcmp(fault, "policy-close")) {
+		++injected; errno = EIO; return -1;
+	}
+	return result;
+}
+
+int rename(const char *from, const char *to)
+{
+	int result;
+	if (policy_operation && !strcmp(fault, "policy-rename")) {
+		++injected; errno = ENOSPC; return -1;
+	}
+	result = syscall(SYS_renameat, AT_FDCWD, from, AT_FDCWD, to);
+	if (policy_operation && !result) policy_published = 1;
+	return result;
+}
+
 int __real_link(const char *from, const char *to);
 int __wrap_link(const char *from, const char *to)
 {
@@ -146,7 +207,9 @@ int main(int argc, char **argv)
 		reset_wgc_setting(1);
 	} else if (!strcmp(argv[1], "policy")) {
 		assert(argc == 4);
+		policy_operation = 1;
 		result = amvpn_set_policy_rules(argv[3]);
+		policy_operation = 0;
 		if (!result) nvram_commit();
 	} else assert(!strcmp(argv[1], "read"));
 	save("/tmp/result.db");

@@ -89,8 +89,8 @@ def main():
             adjustments.append('Correct the residual-state diagnostic format/argument mismatch')
         qca = git_source(repo, args.qca_base, 'release/src-qca-ipq53xx/source-overlay/' + name)
         if name.endswith('/amvpn_routing.c'):
-            # Dev19 commits converted Fusion policy alongside its NVRAM SDN
-            # mappings. Only QCA gains the fallback; other targets stay exact.
+            # QCA commits converted Fusion policy alongside its NVRAM SDN
+            # mappings and publishes later file saves atomically.
             before = "\tif (datalen < 0) {\n\t\tbuffer[0] = '\\0';"
             after = ("\tif (datalen < 0) {\n"
                      '\t\tif (errno == ENOENT && nvram_match("qca_merlin_vpn_migrated", "1"))\n'
@@ -99,12 +99,79 @@ def main():
             if qca.count(before) != 1:
                 raise ValueError('Unexpected QCA policy reader baseline')
             qca = qca.replace(before, after)
-            before = ('\tif (f_write(filename, buffer, strlen(buffer), 0, '
-                      'S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) < 0)\n\t\treturn -1;\n\n')
+            before = '''int amvpn_set_policy_rules(char* buffer)
+{
+	char filename[128];
+
+	if (!d_exists(OVPN_FS_PATH))
+		mkdir(OVPN_FS_PATH, S_IRWXU);
+
+	snprintf(filename, sizeof(filename), "%s/vpndirector_rulelist", OVPN_FS_PATH);
+	if (f_write(filename, buffer, strlen(buffer), 0, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) < 0)
+		return -1;
+
+	return 0;
+}'''
+            after = '''int amvpn_set_policy_rules(char* buffer)
+{
+	char filename[128], temporary[160];
+	const char *next = buffer;
+	size_t left = strlen(buffer);
+	ssize_t written;
+	int fd = -1, dir = -1, created = 0, result = -1, saved_errno;
+
+	if (mkdir(OVPN_FS_PATH, S_IRWXU) && errno != EEXIST)
+		return -1;
+	dir = open("/jffs", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+	if (dir < 0)
+		return -1;
+	if (fsync(dir))
+		goto done;
+	close(dir);
+	dir = open(OVPN_FS_PATH, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+	if (dir < 0)
+		return -1;
+	snprintf(filename, sizeof(filename), "%s/vpndirector_rulelist", OVPN_FS_PATH);
+	snprintf(temporary, sizeof(temporary), "%s/.vpndirector_rulelist.XXXXXX", OVPN_FS_PATH);
+	fd = mkstemp(temporary);
+	if (fd < 0)
+		goto done;
+	created = 1;
+	if (fchmod(fd, S_IRUSR | S_IWUSR))
+		goto done;
+	while (left) {
+		written = write(fd, next, left);
+		if (written < 0 && errno == EINTR)
+			continue;
+		if (written <= 0) {
+			if (!written) errno = EIO;
+			goto done;
+		}
+		next += written;
+		left -= written;
+	}
+	if (fsync(fd))
+		goto done;
+	if (close(fd)) {
+		fd = -1;
+		goto done;
+	}
+	fd = -1;
+	if (rename(temporary, filename) || fsync(dir))
+		goto done;
+	result = nvram_unset("vpndirector_rulelist");
+done:
+	saved_errno = errno;
+	if (fd >= 0) close(fd);
+	if (created) unlink(temporary);
+	close(dir);
+	errno = saved_errno;
+	return result;
+}'''
             if qca.count(before) != 1:
                 raise ValueError('Unexpected QCA policy writer baseline')
-            qca = qca.replace(before, before + '\tnvram_unset("vpndirector_rulelist");\n')
-            qca_adjustments.append('Committed migration policy fallback until a successful JFFS save')
+            qca = qca.replace(before, after)
+            qca_adjustments.append('Committed migration policy fallback until a complete atomic JFFS save')
         current = (repo / name).read_text()
         checks = 0
         rejected = 0

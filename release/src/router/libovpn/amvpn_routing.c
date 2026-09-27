@@ -33,6 +33,11 @@
 
 #include <shutils.h>
 #include <shared.h>
+#ifdef RTCONFIG_SOC_IPQ53XX
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#endif
 #include "openvpn_config.h"
 #include "openvpn_control.h"
 #include "openvpn_setup.h"
@@ -524,6 +529,65 @@ char *amvpn_get_policy_rules(int unit, char *buffer, int bufferlen, vpndir_proto
 
 int amvpn_set_policy_rules(char* buffer)
 {
+#ifdef RTCONFIG_SOC_IPQ53XX
+	char filename[128], temporary[160];
+	const char *next = buffer;
+	size_t left = strlen(buffer);
+	ssize_t written;
+	int fd = -1, dir = -1, created = 0, result = -1, saved_errno;
+
+	if (mkdir(OVPN_FS_PATH, S_IRWXU) && errno != EEXIST)
+		return -1;
+	/* Persist the directory entry too if this save created openvpn. */
+	dir = open("/jffs", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+	if (dir < 0)
+		return -1;
+	if (fsync(dir))
+		goto done;
+	close(dir);
+	dir = open(OVPN_FS_PATH, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+	if (dir < 0)
+		return -1;
+	snprintf(filename, sizeof(filename), "%s/vpndirector_rulelist", OVPN_FS_PATH);
+	snprintf(temporary, sizeof(temporary), "%s/.vpndirector_rulelist.XXXXXX", OVPN_FS_PATH);
+	fd = mkstemp(temporary);
+	if (fd < 0)
+		goto done;
+	created = 1;
+	if (fchmod(fd, S_IRUSR | S_IWUSR))
+		goto done;
+	while (left) {
+		written = write(fd, next, left);
+		if (written < 0 && errno == EINTR)
+			continue;
+		if (written <= 0) {
+			if (!written) errno = EIO;
+			goto done;
+		}
+		next += written;
+		left -= written;
+	}
+	if (fsync(fd))
+		goto done;
+	if (close(fd)) {
+		fd = -1;
+		goto done;
+	}
+	fd = -1;
+	/* Publish only a complete file; a failed first save must not mask the
+	 * migration fallback with a truncated or empty destination. */
+	if (rename(temporary, filename) || fsync(dir))
+		goto done;
+	/* The caller commits this retirement after successful publication. */
+	result = nvram_unset("vpndirector_rulelist");
+done:
+	saved_errno = errno;
+	if (fd >= 0) close(fd);
+	if (created) unlink(temporary);
+	close(dir);
+	errno = saved_errno;
+	return result;
+#else
 	char filename[128];
 
 	if (!d_exists(OVPN_FS_PATH))
@@ -533,11 +597,8 @@ int amvpn_set_policy_rules(char* buffer)
 	if (f_write(filename, buffer, strlen(buffer), 0, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) < 0)
 		return -1;
 
-#ifdef RTCONFIG_SOC_IPQ53XX
-	/* The caller's configuration commit retires the NVRAM fallback. */
-	nvram_unset("vpndirector_rulelist");
-#endif
 	return 0;
+#endif
 }
 
 
