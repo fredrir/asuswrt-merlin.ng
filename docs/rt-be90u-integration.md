@@ -362,6 +362,12 @@ service-hook ordering. Separate ARM processes reload a disposable NVRAM store
 to check committed state. The fixture fails on preserved dev17 at its first
 unrecognized reset command and passes on dev18.
 
+A local audit also preprocesses the full services source with the target
+configuration and all four MULTILAN/Yandex DNS combinations. All dev18 reset
+handlers remain at the main dispatcher level; all four dev17 variants fail
+that check. Includes are removed for this audit, so it checks conditional
+selection rather than complete alternate-profile compilation.
+
 The stop, DPI refresh and script-hook calls are observed substitutes; unrelated
 rc service dependencies abort if reached. This verifies reset dispatch and
 stored settings, not full service shutdown, real NVRAM flash persistence,
@@ -378,3 +384,15 @@ at byte 4,322,736 and SHA-256
 Dev18 hosted results are pending. The prior dev17 GT-BE98 results above cover
 the unchanged common firmware sources; further shared/platform integration and
 hardware validation remain outstanding.
+
+A separate synthetic migration probe links the actual `rc/format.o` and
+packaged libraries. It confirms a remaining upgrade problem: retained ASUS
+`vpnc_clientlist` entries can restore OpenVPN autostart and WireGuard enable
+flags during `adjust_vpnc_config`, including after a profile reset. Init still
+calls this compatibility handler. Stock Fusion profile indices also differ from
+Merlin's fixed SDN mapping: a stock OpenVPN client 1 at index 5 is interpreted as
+Merlin WireGuard client 5. Dev18 does not migrate that retained state. The next
+candidate needs explicit conversion, conflict/rollback handling and repeated
+compatibility-pass tests before persistent-state support can be claimed. See
+the [dev18 evidence](rt-be90u-dev18-validation.json) for the synthetic input and
+observed outputs. No router boot or configuration was changed for this probe.
