@@ -12,6 +12,8 @@ publication failures; dev21 preserves IPv4 VPN protection during SDN refresh.
 Dev22 extends default/unassigned SDN and concurrent-transition handling and
 quarantines identifiable traffic when stock VPN migration defers. Dev23 extends
 quarantine to ambiguous network/DNS scopes and protects correction/retry.
+Dev24 serializes full firewall reloads with VPN updates and retains guards
+when IPv6 is disabled.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -643,3 +645,41 @@ failed correction/retry. See [dev23 validation evidence](rt-be90u-dev23-validati
 for exact identities, counts and hosted status. Whole-router startup, physical
 router forwarding/acceleration, IPv6 VPN transport, recovery and hardware remain
 unverified. The image is experimental and is not ready to flash.
+
+## Dev24: firewall reload and service lifecycle
+
+Full QCA filter generation and replacement now hold the same routing lock as
+incremental VPN updates, followed by the IPv6 kill-switch lock. This prevents
+an older generated table from overwriting a newer quarantine update. These direct
+filter writers also serialize access to their shared output files.
+
+Default-filter setup restores both families before releasing its locks and
+invoking SDN callbacks. Its IPv6 table now declares and attaches the SDN chains
+those callbacks require. A failed restore skips that callback. When IPv6 is
+disabled, one atomic filter transaction replaces the earlier flush, retaining
+VPN guards and existing built-in policies. Lock failures preserve installed
+filter tables. Existing void generator APIs still report restore errors through logs.
+
+| Local validation | Result |
+| --- | --- |
+| Packaged ARM suites | 20 passed |
+| Firewall/service lifecycle | 1456 checks at 471 command boundaries |
+| Preserved dev23 regression | 71 expected failures across 1605 checks |
+| Source assembly and Git index | 150,614 inputs verified; only version and QCA firewall inputs changed |
+| Helpers/common source checks | 25 tests; 2,560 comparisons; 32 rejected profiles |
+| Stock-library image checks | Candidate accepted; corrupt magic/payload rejected; model/signature enforcement remains unproven |
+
+The new fixture invokes compiled full filter generators and service dispatch,
+shared configuration reads, real locks and native kernel table replacement in
+isolated containers. It observes packet behavior during concurrent updates and
+failed restores. Deletion-only cleanup may find that old rules are already gone;
+new rule restores must succeed, and cleanup still receives packet checks.
+Selected feature configurations are covered; disabled optional
+and hardware dependencies are explicit fixture boundaries. This is not a whole
+router boot or complete feature-matrix result.
+
+See [dev24 evidence](rt-be90u-dev24-validation.json) for exact identities and
+counts. [Recovery readiness](rt-be90u-recovery-readiness.md) records refreshed
+read-only stock metadata, verified rollback files and the next physical gate.
+Recovery access, candidate boot, radios, acceleration, storage persistence and
+power-loss behavior still need separate hardware evidence.

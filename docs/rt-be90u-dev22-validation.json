@@ -1164,8 +1164,8 @@
     "gt_be98": {
       "run_id": 36321803707,
       "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36321803707",
-      "status": "in_progress",
-      "conclusion": "",
+      "status": "completed",
+      "conclusion": "success",
       "source_commit": "c932ab6d44f2cdfd07c1da423d420829ccf4b14b"
     }
   },
