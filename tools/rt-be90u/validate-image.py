@@ -43,6 +43,7 @@ def main():
                     ('sdn-concurrency', 'run-sdn-concurrency-test.sh', [], 'net'),
                     ('deferred-migration', 'run-deferred-migration-test.sh', [], 'net'),
                     ('broad-quarantine', 'run-broad-quarantine-test.sh', [], 'net'),
+                    ('firewall-lifecycle', 'run-firewall-lifecycle-test.sh', [], 'net'),
                     ('wg-export', 'run-wg-export-test.sh', [], 'net'),
                     ('wg-tunnel', 'run-wg-tunnel-test.sh', [], 'tunnel')],
         'openvpn': [('tunnel-' + mode, 'run-vpn-tunnel-test.sh', ['--mode', mode], 'tunnel')

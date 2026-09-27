@@ -27,6 +27,7 @@
 #include <rc.h>
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 #include <amvpn_deferred.h>
+#include <openvpn_control.h>
 #endif
 
 #include <stdio.h>
@@ -2899,24 +2900,90 @@ void write_access_restriction(FILE *fp_ipv4, FILE *fp_ipv6)
  *     ACCEPT -> FORWARD ACCEPT
  */
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+/* Full replacements share the routing snapshot lock with incremental VPN
+ * updates. Keep the order firewall -> VPN routing -> IPv6 kill switch, and
+ * release these locks before invoking SDN or service callbacks. */
+static int qca_filter_lock(int *ipv6_lock)
+{
+	int lock = file_lock(VPNROUTING_LOCK);
+	*ipv6_lock = -1;
+	if (lock < 0) goto failed;
+#ifdef RTCONFIG_IPV6
+	*ipv6_lock = file_lock("vpn6ks");
+	if (*ipv6_lock < 0) {
+		file_unlock(lock);
+		goto failed;
+	}
+#endif
+	return lock;
+failed:
+	logmessage("firewall", "Cannot lock VPN filter transaction; existing rules retained");
+	return -1;
+}
+
+static void qca_filter_unlock(int lock, int ipv6_lock)
+{
+	if (ipv6_lock >= 0) file_unlock(ipv6_lock);
+	file_unlock(lock);
+}
+
+#ifdef RTCONFIG_IPV6
+/* Match the disabled-IPv6 flush's existing policies and empty normal chains,
+ * but publish VPN protection in the same atomic filter-table replacement. */
+static void qca_reset_ipv6_filter(void)
+{
+	char path[] = "/tmp/filter_ipv6.disabled.XXXXXX";
+	int lock, ipv6_lock, fd, failed, ret;
+	FILE *fp;
+	lock = qca_filter_lock(&ipv6_lock);
+	if (lock < 0) return;
+	fd = mkstemp(path);
+	if (fd < 0) goto done;
+	fp = fdopen(fd, "w");
+	if (!fp) { close(fd); unlink(path); goto done; }
+	fprintf(fp, "*filter\n-F\n");
+	amvpn_write_ipv6_killswitch(fp);
+	failed = amvpn_write_deferred_dns(fp, AF_INET6);
+	fprintf(fp, "COMMIT\n");
+	failed |= ferror(fp);
+	if (fclose(fp)) failed = 1;
+	ret = failed ? -1 : eval("ip6tables-restore", "--noflush", path);
+	rule_apply_checking("firewall", __LINE__, path, ret);
+	unlink(path);
+done:
+	qca_filter_unlock(lock, ipv6_lock);
+}
+#endif
+#endif
+
 void 	// 0928 add
 start_default_filter(int lanunit)
 {
 	// TODO: handle multiple lan
 	FILE *fp;
-	char *lan_if = nvram_safe_get("lan_ifname");
+	char *lan_if;
 	int evalRet, n;
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	int vpn_lock, ipv6_lock, complete = 0;
+#endif
 #ifdef CONFIG_BCMWL5
 	int debug = factory_debug();
 #else
 	int debug = IS_ATE_FACTORY_MODE();
 #endif
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	vpn_lock = qca_filter_lock(&ipv6_lock);
+	if (vpn_lock < 0) return;
+#endif
+	lan_if = nvram_safe_get("lan_ifname");
+
 	if (!is_routing_enabled())
-		return;
+		goto filter_done;
 
 	if ((fp = fopen("/tmp/filter.default", "w")) == NULL)
-		return;
+		goto filter_done;
 	fprintf(fp, "*filter\n"
 		":INPUT %s [0:0]\n"
 		":FORWARD %s [0:0]\n"
@@ -3046,7 +3113,7 @@ start_default_filter(int lanunit)
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 	if (amvpn_write_deferred_dns(fp, AF_INET)) {
 		fclose(fp);
-		return;
+		goto filter_done;
 	}
 #endif
 	fprintf(fp, "COMMIT\n\n");
@@ -3054,14 +3121,17 @@ start_default_filter(int lanunit)
 
 	evalRet = eval("iptables-restore", "/tmp/filter.default");
 	rule_apply_checking("firewall", __LINE__, "/tmp/filter.default", evalRet);
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	if (evalRet) goto filter_done;
+#endif
 
-#ifdef RTCONFIG_MULTILAN_CFG
+#if defined(RTCONFIG_MULTILAN_CFG) && !(defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN))
 	handle_sdn_feature(ALL_SDN, SDN_FEATURE_ALL_FIREWALL, RC_SERVICE_START);
 #endif
 
 #ifdef RTCONFIG_IPV6
 	if ((fp = fopen("/tmp/filter_ipv6.default", "w")) == NULL)
-		return;
+		goto filter_done;
 	fprintf(fp, "*filter\n"
 		":INPUT %s [0:0]\n"
 		":FORWARD %s [0:0]\n"
@@ -3072,6 +3142,12 @@ start_default_filter(int lanunit)
 		debug ? "ACCEPT" : "DROP",
 		debug ? "ACCEPT" : "DROP",
 		ipv6_enabled() ? "ACCEPT" : "DROP");
+
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN) && defined(RTCONFIG_MULTILAN_CFG)
+	/* The post-commit SDN callback populates these chains in both families. */
+	fprintf(fp, ":%s - [0:0]\n:%s - [0:0]\n:%s - [0:0]\n",
+		SDN_FILTER_INPUT_CHAIN, SDN_FILTER_FORWARD_CHAIN, SDN_INTERNAL_ACCESS_CHAIN);
+#endif
 
 	if (ipv6_enabled()) {
 		fprintf(fp, "-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT\n");
@@ -3115,15 +3191,37 @@ start_default_filter(int lanunit)
 		  "-A logdrop -j DROP\n");
 
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+#ifdef RTCONFIG_MULTILAN_CFG
+	if (ipv6_enabled()) {
+		fprintf(fp, "-A INPUT -j %s\n", SDN_FILTER_INPUT_CHAIN);
+		fprintf(fp, "-A FORWARD -j %s\n", SDN_FILTER_FORWARD_CHAIN);
+		fprintf(fp, "-A %s -j %s\n", SDN_FILTER_FORWARD_CHAIN, SDN_INTERNAL_ACCESS_CHAIN);
+	}
+#endif
 	amvpn_write_ipv6_killswitch(fp);
-	if (amvpn_write_deferred_dns(fp, AF_INET6)) { fclose(fp); return; }
+	if (amvpn_write_deferred_dns(fp, AF_INET6)) { fclose(fp); goto filter_done; }
 #endif
 	fprintf(fp, "COMMIT\n\n");
 	fclose(fp);
 
 	evalRet = eval("ip6tables-restore", "/tmp/filter_ipv6.default");
 	rule_apply_checking("firewall", __LINE__, "/tmp/filter_ipv6.default", evalRet);
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	if (evalRet) goto filter_done;
 #endif
+#endif
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	complete = 1;
+#endif
+filter_done:
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	qca_filter_unlock(vpn_lock, ipv6_lock);
+#ifdef RTCONFIG_MULTILAN_CFG
+	if (complete)
+		handle_sdn_feature(ALL_SDN, SDN_FEATURE_ALL_FIREWALL, RC_SERVICE_START);
+#endif
+#endif
+	return;
 }
 
 #ifdef RTCONFIG_WIFI_SON
@@ -4440,6 +4538,11 @@ filter_setting(int wan_unit, char *lan_if, char *lan_ip, char *logaccept, char *
 	ip2class(lan_ip, nvram_safe_get("lan_netmask"), lan_class);
 #endif
 	int evalRet;
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	int vpn_lock, ipv6_lock;
+	vpn_lock = qca_filter_lock(&ipv6_lock);
+	if (vpn_lock < 0) return;
+#endif
 
 	snprintf(prefix, sizeof(prefix), "wan%d_", wan_unit);
 
@@ -4452,12 +4555,12 @@ filter_setting(int wan_unit, char *lan_if, char *lan_ip, char *logaccept, char *
 	snprintf(wan_ip, sizeof(wan_ip), "%s", nvram_safe_get(strcat_r(prefix, "ipaddr", tmp)));
 	snprintf(wanx_ip, sizeof(wanx_ip), "%s", nvram_safe_get(strcat_r(prefix, "xipaddr", tmp)));
 
-	if ((fp=fopen("/tmp/filter_rules", "w"))==NULL) return;
+	if ((fp=fopen("/tmp/filter_rules", "w"))==NULL) goto filter_done;
 #ifdef RTCONFIG_IPV6
 	if (ipv6_enabled()) {
 		if ((fp_ipv6 = fopen("/tmp/filter_rules_ipv6", "w"))==NULL) {
 			fclose(fp);
-			return;
+			goto filter_done;
 		}
 	}
 #endif
@@ -6172,7 +6275,7 @@ TRACE_PT("write wl filter\n");
 #ifdef RTCONFIG_IPV6
 		if (fp_ipv6) fclose(fp_ipv6);
 #endif
-		return;
+		goto filter_done;
 	}
 #endif
 
@@ -6192,7 +6295,7 @@ TRACE_PT("write wl filter\n");
 		write_extra_filter6(fp_ipv6);
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 		amvpn_write_ipv6_killswitch(fp_ipv6);
-		if (amvpn_write_deferred_dns(fp_ipv6, AF_INET6)) { fclose(fp_ipv6); return; }
+		if (amvpn_write_deferred_dns(fp_ipv6, AF_INET6)) { fclose(fp_ipv6); goto filter_done; }
 #endif
 
 		fprintf(fp_ipv6, "COMMIT\n\n");
@@ -6201,6 +6304,11 @@ TRACE_PT("write wl filter\n");
 		rule_apply_checking("firewall", __LINE__, "/tmp/filter_rules_ipv6", evalRet);
 	}
 #endif
+filter_done:
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	qca_filter_unlock(vpn_lock, ipv6_lock);
+#endif
+	return;
 }
 
 #if defined(RTCONFIG_DUALWAN) || defined(RTCONFIG_MULTICAST_IPTV) // RTCONFIG_DUALWAN || RTCONFIG_MULTICAST_IPTV
@@ -6235,18 +6343,23 @@ filter_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)
 	int v4v6_ok = IPT_V4;
 	int wan_max_unit = WAN_UNIT_MAX;
 	int evalRet;
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	int vpn_lock, ipv6_lock;
+	vpn_lock = qca_filter_lock(&ipv6_lock);
+	if (vpn_lock < 0) return;
+#endif
 
 #ifdef RTCONFIG_MULTICAST_IPTV
 	if (nvram_get_int("switch_stb_x") > 6)
 		wan_max_unit = WAN_UNIT_MULTICAST_IPTV_MAX;
 #endif
 
-	if ((fp=fopen("/tmp/filter_rules", "w"))==NULL) return;
+	if ((fp=fopen("/tmp/filter_rules", "w"))==NULL) goto filter_done;
 #ifdef RTCONFIG_IPV6
 	if (ipv6_enabled()) {
 		if ((fp_ipv6 = fopen("/tmp/filter_rules_ipv6", "w"))==NULL) {
 			fclose(fp);
-			return;
+			goto filter_done;
 		}
 	}
 #endif
@@ -7992,7 +8105,7 @@ TRACE_PT("write wl filter\n");
 #ifdef RTCONFIG_IPV6
 		if (fp_ipv6) fclose(fp_ipv6);
 #endif
-		return;
+		goto filter_done;
 	}
 #endif
 
@@ -8012,7 +8125,7 @@ TRACE_PT("write wl filter\n");
 		write_extra_filter6(fp_ipv6);
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 		amvpn_write_ipv6_killswitch(fp_ipv6);
-		if (amvpn_write_deferred_dns(fp_ipv6, AF_INET6)) { fclose(fp_ipv6); return; }
+		if (amvpn_write_deferred_dns(fp_ipv6, AF_INET6)) { fclose(fp_ipv6); goto filter_done; }
 #endif
 
 		fprintf(fp_ipv6, "COMMIT\n\n");
@@ -8021,7 +8134,13 @@ TRACE_PT("write wl filter\n");
 		rule_apply_checking("firewall", __LINE__, "/tmp/filter_rules_ipv6", evalRet);
 	}
 #endif
+filter_done:
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	qca_filter_unlock(vpn_lock, ipv6_lock);
+#endif
+	return;
 }
+
 #endif // RTCONFIG_DUALWAN
 
 void
@@ -9320,7 +9439,11 @@ int start_firewall(int wanunit, int lanunit)
 #ifdef RTCONFIG_IPV6
 	if (!ipv6_enabled())
 	{
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+		qca_reset_ipv6_filter();
+#else
 		eval("ip6tables", "-F");
+#endif
 		eval("ip6tables", "-t", "mangle", "-F");
 	}
 #endif
