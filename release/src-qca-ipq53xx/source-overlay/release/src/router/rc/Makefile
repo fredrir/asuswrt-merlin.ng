@@ -395,6 +395,9 @@ else
 OBJS += qos.o
 endif
 OBJS += format.o
+ifeq ($(RTCONFIG_SOC_IPQ53XX),y)
+OBJS += vpn_migrate.o
+endif
 ifeq ($(RTCONFIG_SINGLEIMG_B),y)
 OBJS += fwupg_flashing.o
 endif

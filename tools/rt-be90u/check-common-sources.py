@@ -77,6 +77,7 @@ def main():
         upstream = git_source(repo, args.base, name)
         original_hash = hashlib.sha256(upstream.encode()).hexdigest()
         adjustments = []
+        qca_adjustments = []
         if name.endswith('/openvpn_options.c'):
             # The old format has two %d placeholders but only one argument.
             # This existing port fix is valid on all architectures.
@@ -87,6 +88,23 @@ def main():
             upstream = upstream.replace(before, after)
             adjustments.append('Correct the residual-state diagnostic format/argument mismatch')
         qca = git_source(repo, args.qca_base, 'release/src-qca-ipq53xx/source-overlay/' + name)
+        if name.endswith('/amvpn_routing.c'):
+            # Dev19 commits converted Fusion policy alongside its NVRAM SDN
+            # mappings. Only QCA gains the fallback; other targets stay exact.
+            before = "\tif (datalen < 0) {\n\t\tbuffer[0] = '\\0';"
+            after = ("\tif (datalen < 0) {\n"
+                     '\t\tif (errno == ENOENT && nvram_match("qca_merlin_vpn_migrated", "1"))\n'
+                     '\t\t\tstrlcpy(buffer, nvram_safe_get("vpndirector_rulelist"), bufferlen);\n'
+                     "\t\telse\n\t\tbuffer[0] = '\\0';")
+            if qca.count(before) != 1:
+                raise ValueError('Unexpected QCA policy reader baseline')
+            qca = qca.replace(before, after)
+            before = ('\tif (f_write(filename, buffer, strlen(buffer), 0, '
+                      'S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) < 0)\n\t\treturn -1;\n\n')
+            if qca.count(before) != 1:
+                raise ValueError('Unexpected QCA policy writer baseline')
+            qca = qca.replace(before, before + '\tnvram_unset("vpndirector_rulelist");\n')
+            qca_adjustments.append('Committed migration policy fallback until a successful JFFS save')
         current = (repo / name).read_text()
         checks = 0
         rejected = 0
@@ -111,7 +129,8 @@ def main():
                 checks += 1
         results.append({'file': name, 'profiles_checked': checks,
                         'invalid_profiles_rejected': rejected,
-                        'upstream_sha256': original_hash, 'upstream_adjustments': adjustments})
+                        'upstream_sha256': original_hash, 'upstream_adjustments': adjustments,
+                        'ipq53xx_adjustments': qca_adjustments})
     print(json.dumps({'base': args.base, 'qca_base': args.qca_base,
                       'files': results, 'comparisons_passed': sum(r['profiles_checked'] for r in results),
                       'invalid_profiles_rejected': sum(r['invalid_profiles_rejected'] for r in results),

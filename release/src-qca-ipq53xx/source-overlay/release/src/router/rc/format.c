@@ -175,6 +175,11 @@ static int _find_active_vpnc_id()
 
 void adjust_vpnc_config(void)
 {
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	extern int migrate_qca_vpn_config(void);
+	/* The ASUS loader changes enable flags while reading Fusion records. */
+	migrate_qca_vpn_config();
+#else
 	char *vpnc_clientlist;
 	char *vpnc_dev_policy_list;
 	int active_id, i, default_wan_idx = 0, flag = 0;
@@ -251,5 +256,6 @@ void adjust_vpnc_config(void)
 		nvram_set("vpnc_dev_policy_list", buf);
 	}
 	
+#endif
 }
 #endif

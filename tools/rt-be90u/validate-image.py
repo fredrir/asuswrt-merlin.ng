@@ -33,6 +33,7 @@ def main():
     cases = {
         'basic': [('config', 'run-vpn-config-test.sh', [], 'basic'),
                   ('vpn-reset', 'run-vpn-reset-test.sh', [], 'basic'),
+                  ('vpn-migration', 'run-vpn-migration-test.sh', [], 'basic'),
                   ('ovpn-wrappers', 'run-ovpn-wrappers-test.sh', [], 'basic'),
                   ('wg-import', 'run-wg-import-test.sh', [], 'basic')],
         'network': [('network', 'run-vpn-network-test.sh', [], 'net'),

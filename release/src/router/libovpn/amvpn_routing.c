@@ -29,6 +29,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include <shutils.h>
 #include <shared.h>
@@ -473,6 +474,13 @@ char *amvpn_get_policy_rules(int unit, char *buffer, int bufferlen, vpndir_proto
 
 	datalen = f_read(filename, buffer, bufferlen-1);
 	if (datalen < 0) {
+#ifdef RTCONFIG_SOC_IPQ53XX
+		/* Migration commits policy and SDN/profile mappings together in NVRAM.
+		 * A later UI save creates the JFFS file, which always takes precedence. */
+		if (errno == ENOENT && nvram_match("qca_merlin_vpn_migrated", "1"))
+			strlcpy(buffer, nvram_safe_get("vpndirector_rulelist"), bufferlen);
+		else
+#endif
 		buffer[0] = '\0';
 	} else {
 		buffer[datalen] = '\0';
@@ -525,6 +533,10 @@ int amvpn_set_policy_rules(char* buffer)
 	if (f_write(filename, buffer, strlen(buffer), 0, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) < 0)
 		return -1;
 
+#ifdef RTCONFIG_SOC_IPQ53XX
+	/* The caller's configuration commit retires the NVRAM fallback. */
+	nvram_unset("vpndirector_rulelist");
+#endif
 	return 0;
 }
 

@@ -42,6 +42,10 @@ vpnc_set_basic_conf(const char *server, const char *username, const char *passwd
 #ifdef RTCONFIG_OPENVPN
 static void _update_ovpn_client_enable(int unit, int enable)
 {
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	/* Retained Fusion records are not authoritative after Merlin takes over. */
+	return;
+#else
 	char buf[32] = {0};
 	char *cp;
 	char unit_str[4] = {0};
@@ -67,6 +71,7 @@ static void _update_ovpn_client_enable(int unit, int enable)
 		}
 		nvram_set("vpn_clientx_eas", buf);
 	}
+#endif
 }
 #endif
 
@@ -149,7 +154,9 @@ int vpnc_load_profile(VPNC_PROFILE *list, const int list_size, const int prof_ve
 				list[cnt].protocol = VPNC_PROTO_WG;
 				list[cnt].config.wg.wg_idx = (int)strtol(server, NULL, 0);
 				snprintf(prefix, sizeof(prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, list[cnt].config.wg.wg_idx);
+#if !(defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN))
 				nvram_pf_set_int(prefix, "enable", list[cnt].active);
+#endif
 			}
 #endif
 #ifdef RTCONFIG_TPVPN
@@ -185,7 +192,9 @@ int vpnc_load_profile(VPNC_PROFILE *list, const int list_size, const int prof_ve
 					list[cnt].protocol = VPNC_PROTO_WG;
 					list[cnt].config.wg.wg_idx = (int)strtol(server, NULL, 0);
 					snprintf(prefix, sizeof(prefix), "%s%d_", WG_CLIENT_NVRAM_PREFIX, list[cnt].config.wg.wg_idx);
+#if !(defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN))
 					nvram_pf_set_int(prefix, "enable", list[cnt].active);
+#endif
 				}
 				else
 				{
@@ -617,4 +626,3 @@ void reset_wgc_setting(int unit){
 	nvram_commit();
 }
 #endif
-

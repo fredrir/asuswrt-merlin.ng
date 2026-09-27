@@ -25355,7 +25355,8 @@ void config_format_compatibility_handler(void)
 	adjust_access_restrict_config();
 #if defined(RTCONFIG_VPN_FUSION)
 	adjust_vpnc_config();
-#if defined(RTCONFIG_MULTILAN_CFG)
+#if defined(RTCONFIG_MULTILAN_CFG) && !(defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN))
+	/* QCA's converter translates SDN/default-WAN indices in the same commit. */
 	adjust_sdn0_vpnc_idx();
 #endif
 #endif

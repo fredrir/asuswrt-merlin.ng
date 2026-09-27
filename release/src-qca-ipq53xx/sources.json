@@ -75916,6 +75916,7 @@
     "release/src/router/rc/firewall.c",
     "release/src/router/rc/firewall_sdn.c",
     "release/src/router/rc/format.c",
+    "release/src/router/rc/vpn_migrate.c",
     "release/src/router/rc/futest.c",
     "release/src/router/rc/futest.h",
     "release/src/router/rc/gn_wbl.c",
