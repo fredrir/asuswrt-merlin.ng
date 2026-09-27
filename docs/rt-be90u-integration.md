@@ -10,7 +10,8 @@ WireGuard profile-reset service dispatch. Dev19 adds conservative, one-time
 Fusion profile and policy migration. Dev20 repairs policy-save persistence and
 publication failures; dev21 preserves IPv4 VPN protection during SDN refresh.
 Dev22 extends default/unassigned SDN and concurrent-transition handling and
-quarantines identifiable traffic when stock VPN migration defers.
+quarantines identifiable traffic when stock VPN migration defers. Dev23 extends
+quarantine to ambiguous network/DNS scopes and protects correction/retry.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -592,10 +593,53 @@ protocol-attribute encoding; kernel operations use native host tools because QEM
 does not support the firmware binary's full netlink path.
 
 See [dev22 validation evidence](rt-be90u-dev22-validation.json) for exact source,
-image, runtime counts and hosted status. Broader blocking for unidentifiable
-malformed policies or an IPv4 client's unknown IPv6 identity remains undecided.
-Destination-only policies cannot identify that client's requests to the shared
-router resolver. Port-53 guards also block cached/local answers for affected
-sources; encrypted DNS classification and IPv6 VPN routing are not established.
+image, runtime counts and hosted status. Dev23 below adds the approved broader
+blocking for unidentifiable malformed policies, unknown IPv6 identity and
+destination-only shared-resolver requests. Port-53 guards also block cached/local
+answers for affected sources; encrypted DNS classification and IPv6 VPN routing are not established.
 Broader WAN/firewall/service transitions, recovery and hardware testing remain
 outstanding. No router state was changed.
+
+## Dev23: block ambiguous VPN scope until corrected
+
+When a retained VPN policy cannot identify its original client, dev23 blocks
+forwarded traffic and port-53 DNS on the affected network. If no network can be
+identified safely, the block covers all configured LAN and guest ingress. Valid
+IPv4 client selectors retain their IPv4 scope and block IPv6 on their possible
+networks. Destination-only policies retain their destination traffic scope and
+block shared-resolver DNS across possible ingress networks.
+
+The parser reads original active/index/selector values and validates SDN network
+references before trusting them. Malformed rows cannot silently become disabled
+or WAN policies. Source and interface selectors retain their original union;
+a valid interface does not narrow a separate unidentifiable source branch.
+Valid disabled/WAN rows add no quarantine of their own.
+
+The filter drops quarantined forwarded packets regardless of earlier route
+selection and runs before existing FORWARD acceptance rules. Updates stage
+old and new protection before inspecting routes. Failed corrections retain
+previously installed quarantine. Corrected scopes are released after successful
+reconciliation;
+ambiguous leftover routes or invalid interface definitions must also be resolved.
+Corrected fixed SDNs retain staging until their owner installs the replacement
+lookup and required normal guards. Successful correction resumes existing normal
+DNS behavior; ordinary VPN DNS enforcement is unchanged. Unowned routes are
+preserved. Router management by address, DHCP and router-origin traffic remain
+available; DNS filtering also blocks affected cached/local answers.
+
+| Local validation | Result |
+| --- | --- |
+| Packaged ARM suites | 19 passed |
+| Broad quarantine | 514 checks at 53 command boundaries |
+| Existing deferred migration/firewall controls | 50 migration controls and 58 firewall checks |
+| Parser | 39 selector cases; no NVRAM writes |
+| Source assembly and Git index | 150,614 inputs verified |
+| Helpers/common source checks | 25 tests; 2,560 comparisons; 32 rejected profiles |
+
+Preserved dev22 reproduces the missing broader protection. New native packet
+checks cover known/unknown networks, raw SDN ambiguity, earlier routing/DNS
+exceptions, management/DHCP/router-origin controls, replacement boundaries and
+failed correction/retry. See [dev23 validation evidence](rt-be90u-dev23-validation.json)
+for exact identities, counts and hosted status. Whole-router startup, physical
+router forwarding/acceleration, IPv6 VPN transport, recovery and hardware remain
+unverified. The image is experimental and is not ready to flash.

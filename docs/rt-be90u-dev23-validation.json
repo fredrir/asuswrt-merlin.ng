@@ -1,45 +1,34 @@
 {
-  "source_commit": "c932ab6d44f2cdfd07c1da423d420829ccf4b14b",
-  "fixture_commit": "c932ab6d44f2cdfd07c1da423d420829ccf4b14b",
+  "source_commit": "53e26ce4b02e6152730d80d33eb21d5214c8486f",
+  "fixture_commit": "53e26ce4b02e6152730d80d33eb21d5214c8486f",
   "base_commit": "920b77f5f92db14717a27abd5c8e1b06ae6c8ec1",
   "image": {
-    "bytes": 59062817,
-    "sha256": "99eaeeacd9c694b0ec2039e5311946d7d344f1f6103c09fdf6928f1c608c99fe",
+    "bytes": 59067337,
+    "sha256": "adcc9c59537b45739b0212ae001659561a102cb0902556c975476535d934b9fc",
     "model": "TUF-BE9400",
-    "timestamp": 1790514668,
+    "timestamp": 1790517283,
     "header_crc32": "valid",
     "payload_crc32": "valid",
     "flash_compatibility": "not established",
     "squashfs_offset": 4322736,
-    "path": "release/src-qca-ipq53xx/image/TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev22-vpn.trx"
+    "path": "release/src-qca-ipq53xx/image/TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev23-vpn.trx"
   },
   "build": {
-    "log": "logs/dev22-native-build.log",
-    "sha256": "72d134de07b0999a4234f2f3a85f1194de09ad8b5330223aa0ece576be1ad1dc",
+    "log": "logs/dev23-native-build.log",
+    "sha256": "5005231f37c7ffe34638438eb450505f474c69ae6bc1ded24eb7d0affba00ecd",
     "exit": 0,
-    "mode": "incremental native build after preserving dev21",
+    "mode": "incremental native build from verified repository inputs; first dev23 candidate preserved",
     "builder": "rt-be90u-ci-build:3006",
     "network": "none"
   },
   "source_validation": {
     "verified_repository_inputs": 150614,
     "materialized": 150614,
-    "added_from_dev21": [
-      "release/src/router/libovpn/amvpn_deferred.c",
-      "release/src/router/libovpn/amvpn_deferred.h",
-      "release/src/router/shared/qca_vpn_deferred.h"
-    ],
-    "changes_from_dev21": [
+    "added_from_dev22": [],
+    "changes_from_dev22": [
       "release/src/router/extendno.conf",
-      "release/src/router/libovpn/Makefile",
       "release/src/router/libovpn/amvpn_deferred.c",
-      "release/src/router/libovpn/amvpn_deferred.h",
-      "release/src/router/libovpn/amvpn_routing.c",
-      "release/src/router/libovpn/amvpn_routing.h",
-      "release/src/router/rc/firewall.c",
       "release/src/router/rc/sdn.c",
-      "release/src/router/rc/services.c",
-      "release/src/router/rc/vpnc_fusion.c",
       "release/src/router/shared/qca_vpn_deferred.h",
       "release/src/router/shared/vpn_utils.c"
     ],
@@ -179,63 +168,63 @@
   "compiled_objects": [
     {
       "file": "release/src/router/rc/sdn.o",
-      "sha256": "727daab2092e4d8226ec4f1b579bd329524c3ddc04f79659d7d6edfecb2cbc10",
-      "matches_dev21": false
+      "sha256": "4d4ef2e4e6df55364e562c794e3e5038eca00cff007473b267330a546bbfb241",
+      "matches_dev22": false
     },
     {
       "file": "release/src/router/rc/services.o",
       "sha256": "820fd61b9882b16b697ad5db6eca3e546d3b79a5a04d9f9e491e3f11e59a6b55",
-      "matches_dev21": false
+      "matches_dev22": true
     },
     {
       "file": "release/src/router/rc/firewall.o",
       "sha256": "ce45d0712d422c5b06431a3ee2a79488b06fdffb88ca9fb4307eff0b158f15c6",
-      "matches_dev21": false
+      "matches_dev22": true
     },
     {
       "file": "release/src/router/rc/vpnc_fusion.o",
-      "sha256": "8bbd9cca37361ca83c276e899690f8b2813981ecb744280719ff47ebdd319ecd",
-      "matches_dev21": false
+      "sha256": "7f9109ea3a6c4cb2a2d42dab3a72d4b53924f85e49629e435f75bcb23ce01ac6",
+      "matches_dev22": false
     },
     {
       "file": "release/src/router/rc/init.o",
       "sha256": "7431962e1fb9f22d6697d717fc75bcd8322c6262240d8b7f8f47384cdf8fe72a",
-      "matches_dev21": false
+      "matches_dev22": true
     },
     {
       "file": "release/src/router/rc/format.o",
       "sha256": "5433a0c861cda88a86760781db89e205cebb7e437728b0cb81120ca01cb61476",
-      "matches_dev21": true
+      "matches_dev22": true
     },
     {
       "file": "release/src/router/rc/vpn_migrate.o",
       "sha256": "b4403cf214b88a2f0fbff39a7da497c75662aecb108dc3b8af7a7739b1a4326c",
-      "matches_dev21": true
+      "matches_dev22": true
     },
     {
       "file": "release/src/router/libovpn/amvpn_routing.o",
       "sha256": "f6e071e9748231744231ba539df49cb81da5569753f61ca9cef9864c27444017",
-      "matches_dev21": false
+      "matches_dev22": true
     },
     {
       "file": "release/src/router/libovpn/amvpn_deferred.o",
-      "sha256": "03aa8ad5b95265d503c39acaf2427a79686db5dc8a80fd7406b43945c95a51fb",
-      "matches_dev21": false
+      "sha256": "68248ddd6227a7373728d5c626695dbc45d824b246f4640747191e5cc5ab70d3",
+      "matches_dev22": false
     },
     {
       "file": "release/src/router/libovpn/libovpn.so",
-      "sha256": "f59c1696e8a31bf021aef178ba7eedb31a64b08c35df37c0c59d63676de223cc",
-      "matches_dev21": false
+      "sha256": "8c1b820bb7a5a9e655fc0e87ea419165c5945bfd292aeb3001de2b1f4a848323",
+      "matches_dev22": false
     },
     {
       "file": "release/src/router/shared/vpn_utils.o",
-      "sha256": "8b542a4a14188fa5e3d64e964dac12824dbfe72c92ff3c7c8e97fb80010aa43e",
-      "matches_dev21": false
+      "sha256": "9f9efad7d4acd48f44a219826438b9d5994fda19ffcf2d00b41a9769317a3288",
+      "matches_dev22": false
     },
     {
       "file": "release/src/router/shared/libshared.so",
-      "sha256": "bb3609ac03161fabbebad55b6a63cd044b94e84a7579631996f9ccf3c28bbbc6",
-      "matches_dev21": false
+      "sha256": "dc3d90a25ec3af5fa5047edaa421ab6180260ca503d8fc817a83de6620f16476",
+      "matches_dev22": false
     }
   ],
   "content_audit": {
@@ -375,7 +364,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-config",
+        "rt-be90u-dev23-config",
         "--network",
         "none",
         "--read-only",
@@ -384,7 +373,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -403,7 +392,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-vpn-reset",
+        "rt-be90u-dev23-vpn-reset",
         "--network",
         "none",
         "--read-only",
@@ -412,7 +401,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -431,7 +420,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-vpn-migration",
+        "rt-be90u-dev23-vpn-migration",
         "--network",
         "none",
         "--read-only",
@@ -440,7 +429,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -459,7 +448,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-httpd-policy",
+        "rt-be90u-dev23-httpd-policy",
         "--network",
         "none",
         "--read-only",
@@ -468,7 +457,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -487,7 +476,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-ovpn-wrappers",
+        "rt-be90u-dev23-ovpn-wrappers",
         "--network",
         "none",
         "--read-only",
@@ -496,7 +485,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -515,7 +504,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-wg-import",
+        "rt-be90u-dev23-wg-import",
         "--network",
         "none",
         "--read-only",
@@ -524,7 +513,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -543,7 +532,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-network",
+        "rt-be90u-dev23-network",
         "--network",
         "none",
         "--read-only",
@@ -564,7 +553,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -583,7 +572,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-sdn-refresh",
+        "rt-be90u-dev23-sdn-refresh",
         "--network",
         "none",
         "--read-only",
@@ -604,7 +593,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -623,7 +612,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-sdn-default",
+        "rt-be90u-dev23-sdn-default",
         "--network",
         "none",
         "--read-only",
@@ -644,7 +633,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -663,7 +652,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-sdn-concurrency",
+        "rt-be90u-dev23-sdn-concurrency",
         "--network",
         "none",
         "--read-only",
@@ -684,7 +673,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -703,7 +692,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-deferred-migration",
+        "rt-be90u-dev23-deferred-migration",
         "--network",
         "none",
         "--read-only",
@@ -724,7 +713,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -732,6 +721,46 @@
         "rt-be90u-network-test:58138",
         "sh",
         "/tests/run-deferred-migration-test.sh"
+      ]
+    },
+    {
+      "test": "broad-quarantine",
+      "exit": 0,
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "--pull=never",
+        "--name",
+        "rt-be90u-dev23-broad-quarantine",
+        "--network",
+        "none",
+        "--read-only",
+        "--ulimit",
+        "core=0",
+        "--cap-add",
+        "NET_ADMIN",
+        "--sysctl",
+        "net.ipv4.ip_forward=1",
+        "--sysctl",
+        "net.ipv4.conf.all.rp_filter=0",
+        "--sysctl",
+        "net.ipv4.conf.default.rp_filter=0",
+        "--sysctl",
+        "net.ipv6.conf.all.forwarding=1",
+        "--tmpfs",
+        "/etc/iproute2",
+        "--tmpfs",
+        "/tmp:exec,size=512m",
+        "--mount",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
+        "--mount",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
+        "--mount",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/tools/rt-be90u/tests,dst=/tests,readonly",
+        "rt-be90u-network-test:58138",
+        "sh",
+        "/tests/run-broad-quarantine-test.sh"
       ]
     },
     {
@@ -743,7 +772,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-wg-export",
+        "rt-be90u-dev23-wg-export",
         "--network",
         "none",
         "--read-only",
@@ -764,7 +793,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -783,7 +812,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-wg-tunnel",
+        "rt-be90u-dev23-wg-tunnel",
         "--network",
         "none",
         "--read-only",
@@ -808,7 +837,7 @@
         "--tmpfs",
         "/tmp:exec,dev,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -827,7 +856,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-tunnel-static",
+        "rt-be90u-dev23-tunnel-static",
         "--network",
         "none",
         "--read-only",
@@ -852,7 +881,7 @@
         "--tmpfs",
         "/tmp:exec,dev,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -873,7 +902,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-tunnel-tls",
+        "rt-be90u-dev23-tunnel-tls",
         "--network",
         "none",
         "--read-only",
@@ -898,7 +927,7 @@
         "--tmpfs",
         "/tmp:exec,dev,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -919,7 +948,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-tunnel-tls-crypt",
+        "rt-be90u-dev23-tunnel-tls-crypt",
         "--network",
         "none",
         "--read-only",
@@ -944,7 +973,7 @@
         "--tmpfs",
         "/tmp:exec,dev,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -965,7 +994,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-tunnel-tls-crypt-v2",
+        "rt-be90u-dev23-tunnel-tls-crypt-v2",
         "--network",
         "none",
         "--read-only",
@@ -990,7 +1019,7 @@
         "--tmpfs",
         "/tmp:exec,dev,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -1011,7 +1040,7 @@
         "--rm",
         "--pull=never",
         "--name",
-        "rt-be90u-dev22-ipv6",
+        "rt-be90u-dev23-ipv6",
         "--network",
         "none",
         "--read-only",
@@ -1032,7 +1061,7 @@
         "--tmpfs",
         "/tmp:exec,size=512m",
         "--mount",
-        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev22/rootfs,dst=/firmware,readonly",
+        "type=bind,src=/home/fredrir/projects/rt-be90u-port/image-audit-vpn-dev23/rootfs,dst=/firmware,readonly",
         "--mount",
         "type=bind,src=/home/fredrir/projects/rt-be90u-port/integration-3006/release/src-qca-ipq53xx/.build/source,dst=/work,readonly",
         "--mount",
@@ -1057,124 +1086,148 @@
     },
     "deferred_migration": {
       "checks": 50,
-      "firewall_checks": 57
+      "firewall_checks": 58
+    },
+    "deferred_parser": {
+      "cases": 39,
+      "nvram_writes": 0
+    },
+    "broad_quarantine": {
+      "checks": 514,
+      "command_boundaries": 53,
+      "failures": 0
     }
   },
   "script_hooks": {
-    "log": "logs/dev22-script-hooks.log",
+    "log": "logs/dev23-script-hooks.log",
     "sha256": "f6f256c4b419f703ea4094c8fd8dc4e418284fc053b6649e96714aa61b800938"
   },
   "runtime_logs": [
     {
-      "log": "logs/dev22-vpn-validation/config.log",
+      "log": "logs/dev23-vpn-validation/config.log",
       "sha256": "b4a8d2a1692380be08073698967cb5cf69d0e964cc2b57a667112b7e73678101"
     },
     {
-      "log": "logs/dev22-vpn-validation/vpn-reset.log",
+      "log": "logs/dev23-vpn-validation/vpn-reset.log",
       "sha256": "87a115aef78e30564c99a9d82423b7d1de9117f40134a142b48526f1ec6fcca9"
     },
     {
-      "log": "logs/dev22-vpn-validation/vpn-migration.log",
+      "log": "logs/dev23-vpn-validation/vpn-migration.log",
       "sha256": "5a4f7ace4e28f5cd7a56f413c0924dcf7feaba05260491f4da0575f312690eac"
     },
     {
-      "log": "logs/dev22-vpn-validation/httpd-policy.log",
+      "log": "logs/dev23-vpn-validation/httpd-policy.log",
       "sha256": "acbc599d11c979629a57a9c6b77c611ba5f3bc26e0a84af1456fb44b7267552a"
     },
     {
-      "log": "logs/dev22-vpn-validation/ovpn-wrappers.log",
+      "log": "logs/dev23-vpn-validation/ovpn-wrappers.log",
       "sha256": "4f171fa97df55e6410f803aa36cf2db597616d0e33737e0e1eae4534a868fe7e"
     },
     {
-      "log": "logs/dev22-vpn-validation/wg-import.log",
+      "log": "logs/dev23-vpn-validation/wg-import.log",
       "sha256": "53b4b22164bd8412092f86687df00542e8e6a03fc2fd2aa578dad973be87a649"
     },
     {
-      "log": "logs/dev22-vpn-validation/network.log",
-      "sha256": "a5d350e8d7c80544c8f6d9910accf135fef0a195d0c29498499a28eefb67aadb"
+      "log": "logs/dev23-vpn-validation/network.log",
+      "sha256": "4521ff71042b0e4c7f8bb883b0defec1c819b66b77fd90b222cb41fa5b592bba"
     },
     {
-      "log": "logs/dev22-vpn-validation/sdn-refresh.log",
-      "sha256": "eceb83a87b18de15408001b871b7f3121f0c6b3fbf02ec2728b6c8d87c29a619"
+      "log": "logs/dev23-vpn-validation/sdn-refresh.log",
+      "sha256": "d3811b4d830c4a8c03e6fbeb3d9264ad3e13045311886f078b2cb0a20e8d87b2"
     },
     {
-      "log": "logs/dev22-vpn-validation/sdn-default.log",
-      "sha256": "fb959185be7bdbc4e139d1cc519f4c3bb91560e8685d2ea0e5eb148b5ba7a644"
+      "log": "logs/dev23-vpn-validation/sdn-default.log",
+      "sha256": "414c4c0b8d02f9f7278c7b08d8c7aa72f12edd0b38bcc718dbca67d6d035cb05"
     },
     {
-      "log": "logs/dev22-vpn-validation/sdn-concurrency.log",
-      "sha256": "103f59367cd1e542b97560b35b1ae561cf1e74c4b96a5f7d2b6f85d68b825afc"
+      "log": "logs/dev23-vpn-validation/sdn-concurrency.log",
+      "sha256": "1fa92742c3d2ef83476d4040714d7a967737a74601bbc99aabb7df0625bd600d"
     },
     {
-      "log": "logs/dev22-vpn-validation/deferred-migration.log",
-      "sha256": "1abda48c99302b115d4a25884d8b2ef3887e0407c57ac322f2cc17e79caba3bf"
+      "log": "logs/dev23-vpn-validation/deferred-migration.log",
+      "sha256": "cff1c86ecacf34cca83b5580125c2ae1d702b0a931fdd8cdabb306a97b339c76"
     },
     {
-      "log": "logs/dev22-vpn-validation/wg-export.log",
-      "sha256": "6c0aba34276025b279c8bb1c13568c12963d20b7fe074a38a3d97401a8e01647"
+      "log": "logs/dev23-vpn-validation/broad-quarantine.log",
+      "sha256": "1ce029cca2a38b6745e26623c5786bc23668baa215e9f0bef08ec778215eea6d"
     },
     {
-      "log": "logs/dev22-vpn-validation/wg-tunnel.log",
-      "sha256": "517a2771d640c6cd1aecf0704c2f453570cf7925c6c9214d42771c17a8f1bda8"
+      "log": "logs/dev23-vpn-validation/wg-export.log",
+      "sha256": "29af5dd645ba153014a2548a1ece41dc0b1d715866fac685663137783c4efd61"
     },
     {
-      "log": "logs/dev22-vpn-validation/tunnel-static.log",
-      "sha256": "cab4cf6649e1a7bd8a2ea2d443963f7eef655b7160eebc74d8dd46c765ece89e"
+      "log": "logs/dev23-vpn-validation/wg-tunnel.log",
+      "sha256": "abd3755f246a5951feb4157a8a23706f97ce2b736bca505e2154663ac358d1c5"
     },
     {
-      "log": "logs/dev22-vpn-validation/tunnel-tls.log",
-      "sha256": "1621f273684383c9912ed390fea38c460fc40d1dd5de66b3e3acff937b3afb29"
+      "log": "logs/dev23-vpn-validation/tunnel-static.log",
+      "sha256": "cb5c0480cb08300fd65a584bd8f46d012833a5aed35c509cb6540ed9f2b3a064"
     },
     {
-      "log": "logs/dev22-vpn-validation/tunnel-tls-crypt.log",
-      "sha256": "f305045695f904993b209f30f61a1832af8af38fc1770d97838d0f186151c44f"
+      "log": "logs/dev23-vpn-validation/tunnel-tls.log",
+      "sha256": "94113c9f706baa99b72f7e0259d71165d6cd0980a039bf2e5b1d6d68dc23c286"
     },
     {
-      "log": "logs/dev22-vpn-validation/tunnel-tls-crypt-v2.log",
-      "sha256": "042f7017dbea556c4e55194ecc9cd2c6ccfa1af710358f1abadd8390a48dc4c1"
+      "log": "logs/dev23-vpn-validation/tunnel-tls-crypt.log",
+      "sha256": "e69b0a45044d6f26d893d17dbbef84492bd8755ba2a74621d374027239d64d0e"
     },
     {
-      "log": "logs/dev22-vpn-validation/ipv6.log",
-      "sha256": "f775624c9eb0d7af78da2a7434eeff69a9bd104918d2ab54ead67bb2f3bf2616"
+      "log": "logs/dev23-vpn-validation/tunnel-tls-crypt-v2.log",
+      "sha256": "1e938690a9b0fa9ba16facb409751e0c62339b2b6554ac112f96129d84c776d3"
+    },
+    {
+      "log": "logs/dev23-vpn-validation/ipv6.log",
+      "sha256": "e3feb41237f91adcf229db5731d126db7d97fa8bb16112c3c9c2a0792754c053"
     }
   ],
-  "baseline_commit": "8abdf06c9776458cf809e5f8333306a3a41933ca",
+  "baseline_commit": "c932ab6d44f2cdfd07c1da423d420829ccf4b14b",
   "baseline_reproductions": [
     {
-      "log": "logs/dev21-sdn-default-boundaries-2.log",
-      "sha256": "2ec6b0e3af6723ddf00f1f424288981deaa93cbf0bdfb9754d7d5f13b2fb3586"
-    },
-    {
-      "log": "logs/dev21-sdn-concurrency-baseline-6.log",
-      "sha256": "d929ddbfadc237650f08a55e8e21a3465344ae764573c0f7e2279f9c5fa34627"
-    },
-    {
-      "log": "logs/dev21-deferred-migration-negative-5.log",
-      "sha256": "bdf250489ddbb0ceae231c77968a80bf7f9c441a632d5d2df8c25d77d2008431"
+      "log": "logs/dev22-broad-quarantine-baseline-7.log",
+      "sha256": "6ee800c40f52dd1fe0fddcc62a4fc0512da7844269f70127d8237827816223d8"
     }
   ],
+  "baseline_summary": {
+    "checks": 400,
+    "command_boundaries": 23,
+    "expected_failures": 167
+  },
+  "baseline_fixture_manifest": {
+    "integration-3006/tools/rt-be90u/tests/broad-quarantine-test.py": "e6c6c4a67922290e07806851e5e47854f85b33f9efc54704f67ae3efbf0427f9",
+    "integration-3006/tools/rt-be90u/tests/run-broad-quarantine-test.sh": "c68a19cedffa7bc9695a5c9c20ef6d4ce245a1cb5aa2cef30bcf63be27703644",
+    "integration-3006/tools/rt-be90u/tests/broad-sdn-driver.c": "4297a1ac611083214f79ff3fe1f5375a0e60e5832cced838aa5a567701072bc3",
+    "integration-3006/tools/rt-be90u/tests/deferred-firewall-test.py": "ecf803b30f62ec740ccb5b141a1c27cc81955c4b6e9769a567d43fff9c0d8cc3",
+    "integration-3006/tools/rt-be90u/tests/deferred-firewall-driver.c": "7275aab0b28be8bab7d824b6f717c1f4909cfa5bf77e4dae8deb795d6e1d7e89",
+    "integration-3006/tools/rt-be90u/tests/vpn-network-test.py": "0d2ffb2ec5c3f7dbf8dabb8bd9cd155edd9d739f9e79a3a6be32ff6fa8e1103f",
+    "integration-3006/tools/rt-be90u/tests/vpn-network-driver.c": "45f317ddc5602c4765dbbc5ba49c548868b33f4dee05c3a5670d8aecd90c9aab",
+    "integration-3006/tools/rt-be90u/tests/sdn-default-test.py": "bc22aaaae14420c1b2f8320f1729b598c909da15223cac2aa5f87231c0bebc91",
+    "integration-3006/tools/rt-be90u/tests/sdn-default-driver.c": "25eebed0a6a514507526487d968897943b3ef0ec68a37008c4f94b53c9de5c1c",
+    "integration-3006/tools/rt-be90u/tests/sdn-refresh-test.py": "166b493aaee07661a4f557d379975bc37acca90fade333c60a7a61af81d5009f",
+    "integration-3006/tools/rt-be90u/tests/sdn-refresh-driver.c": "f4416b4d86477133e213bc4f4ef7fbfc9f21770b9dcc1f87d6f2960df44f85d3"
+  },
   "ci": {
     "native": {
-      "run_id": 36321803654,
-      "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36321803654",
-      "status": "completed",
-      "conclusion": "success",
-      "source_commit": "c932ab6d44f2cdfd07c1da423d420829ccf4b14b"
-    },
-    "gt_be98": {
-      "run_id": 36321803707,
-      "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36321803707",
+      "run_id": 36324499501,
+      "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36324499501",
       "status": "in_progress",
       "conclusion": "",
-      "source_commit": "c932ab6d44f2cdfd07c1da423d420829ccf4b14b"
+      "source_commit": "53e26ce4b02e6152730d80d33eb21d5214c8486f"
+    },
+    "gt_be98": {
+      "run_id": 36324499620,
+      "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36324499620",
+      "status": "in_progress",
+      "conclusion": "",
+      "source_commit": "53e26ce4b02e6152730d80d33eb21d5214c8486f"
     }
   },
   "limits": [
     "Experimental software validation; no router writes, flashing, boot or recovery proof.",
     "Network fixtures use isolated native kernel commands with ARM firmware code and synthetic NVRAM.",
     "Filter replacement exercises the production shared emitter; whole firewall/startup orchestration is not established.",
-    "Dev22 lacks broader quarantine for ambiguous selectors and shared-resolver DNS scope; the approved conservative network policy is implemented in dev23.",
+    "User-approved network quarantine can block unrelated clients inside an ambiguous policy scope until corrected.",
     "Affected DNS guards cover UDP/TCP port53; shared-resolver blocking also prevents local/cached answers for that scope.",
+    "Successful SDN correction resumes existing normal DNS behavior; ordinary VPN DNS enforcement is not extended.",
     "No general encrypted DNS classification, IPv6 VPN routing or power-loss durability claim."
   ],
   "independent_review": {
@@ -1183,62 +1236,7 @@
       "review_migration",
       "verify_ci"
     ],
-    "scope": "Cross-review of routing ownership, serialization, selector cleanup, fixture realism and documentation scope",
+    "scope": "Cross-review of ambiguous scope, routing ownership, staged correction/retry, actual SDN callback boundaries and evidence limits",
     "remaining_source_findings": []
-  },
-  "hosted_validation": {
-    "run_id": 36321803654,
-    "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36321803654",
-    "source_commit": "c932ab6d44f2cdfd07c1da423d420829ccf4b14b",
-    "conclusion": "success",
-    "image": {
-      "bytes": 59062849,
-      "sha256": "641b00b369d21ab94e630b05644e49b270a9d2849c0e13df3ff304dbbb626034",
-      "model": "TUF-BE9400",
-      "timestamp": 1790517373,
-      "header_crc32": "valid",
-      "payload_crc32": "valid",
-      "flash_compatibility": "not established",
-      "squashfs_offset": 4322824
-    },
-    "verified_input_records": 150614,
-    "input_records_match_local_dev22": true,
-    "downloaded_firmware_checksum_verified": true,
-    "common_source_comparisons": 2560,
-    "invalid_profile_rejections": 32,
-    "qca_profiles_requiring_runtime_validation": 96,
-    "helper_tests_passed": 25,
-    "packaged_linkage_passed": true,
-    "script_config_event_fixture_passed": true,
-    "basic_arm_suites": [
-      {
-        "test": "config",
-        "exit": 0
-      },
-      {
-        "test": "vpn-reset",
-        "exit": 0
-      },
-      {
-        "test": "vpn-migration",
-        "exit": 0
-      },
-      {
-        "test": "httpd-policy",
-        "exit": 0
-      },
-      {
-        "test": "ovpn-wrappers",
-        "exit": 0
-      },
-      {
-        "test": "wg-import",
-        "exit": 0
-      }
-    ],
-    "reset_cases_passed": 42,
-    "migration_arm_invocations": 133,
-    "http_policy_scenarios": 5,
-    "scope": "Clean build, source/image/linkage/script checks and six basic ARM suites; SDN packet, tunnel and network suites remain local"
   }
 }
