@@ -4,8 +4,9 @@ This branch makes the RT-BE90U firmware build from checked-out repository
 sources. It is based on `master-3006` at
 `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`. It imports the previously tested
 dev14 port (`0dd6c693e2f12bebde29d38b1cd6b0934cce5cad`) and labels this first
-native build `58138-rtbe90u-dev15-vpn`. The current dev17 candidate consolidates
-VPN, rc wrapper and script-hook code into the shared 3006 source tree.
+native build `58138-rtbe90u-dev15-vpn`. Dev17 consolidates VPN, rc wrapper and
+script-hook code into the shared 3006 source tree. The current dev18 candidate
+repairs OpenVPN and WireGuard profile-reset service dispatch.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -317,14 +318,15 @@ and scope. Unlike dev16's 11-suite run, this run includes the new wrapper fixtur
 and omits the unchanged stock image validator. Entware remains at dev16 and
 browser testing at dev12; neither was rerun for this consolidation.
 
-A follow-up service audit found that `clearovpnclient` / `clearovpnserver` are
+A follow-up service audit found that dev17's `clearovpnclient` / `clearovpnserver` are
 inside the inactive `RTCONFIG_YANDEXDNS` branch of the services overlay. Their
 action strings are absent from the compiled services object, although the
 OpenVPN UI pages call those reset actions. This predates dev17 and is outside
 the wrapper/tunnel fixtures. Correcting the dispatch and adding service-level
 regression coverage is required in the next candidate. The WireGuard client UI
 also calls `clearwgclient`, whose dispatcher is missing from the services
-overlay and compiled object.
+overlay and compiled object. Dev18 addresses these three dispatcher gaps as
+described below.
 
 The [clean dev17 hosted build](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36262918390)
 passed on `3d17d4047ea047725225afc00fb587e8fbe90781`, including fresh provisioning,
@@ -340,3 +342,39 @@ also passed on `3d17d4047ea047725225afc00fb587e8fbe90781`, including artifact
 upload. Release and manifest publishing were skipped. This verifies compilation
 of the shared changes for both existing-model variants; it is not GT-BE98
 hardware or runtime validation.
+
+## Dev18: VPN profile reset dispatch
+
+The OpenVPN reset handlers now sit alongside the OpenVPN lifecycle handlers,
+outside the unrelated Yandex DNS conditional. A WireGuard client reset handler
+is also present. Each requires exactly one complete decimal profile number in
+the supported range (OpenVPN servers 1–2; OpenVPN/WireGuard clients 1–5).
+Missing, extra, malformed, overflowing and out-of-range arguments leave profiles
+unchanged. This repairs the reset commands already sent by the shipped UI pages.
+
+The new offline fixture links the firmware's actual `rc/services.o` against the
+packaged `libovpn`, `libshared` and real `router_defaults` table. It runs 42 cases:
+all 12 UI stop/reset sequences, three accepted leading-zero forms and 27 invalid
+requests. Valid requests are repeated to check idempotence. It checks every
+packaged profile default, autostart membership, saved custom configuration,
+certificate/key removal, unchanged neighbouring profiles, commit counts and
+service-hook ordering. Separate ARM processes reload a disposable NVRAM store
+to check committed state. The fixture fails on preserved dev17 at its first
+unrecognized reset command and passes on dev18.
+
+The stop, DPI refresh and script-hook calls are observed substitutes; unrelated
+rc service dependencies abort if reached. This verifies reset dispatch and
+stored settings, not full service shutdown, real NVRAM flash persistence,
+reboot/migration behavior or router hardware. The basic ARM suite now runs in
+the experimental hosted workflow after each clean image build.
+
+The local dev18 build, image/linkage checks, all 12 selected VPN suites,
+script/config/event fixture, 25 helper tests and 2,144 common-source comparisons
+(plus 32 expected invalid-profile rejections) passed. An independent assembly
+verified all 150,610 inputs; only `rc/services.c` and the version label changed
+from dev17's firmware inputs. The local image is 59,049,729 bytes, with SquashFS
+at byte 4,322,736 and SHA-256
+`f290945bf865039cc38f3a3668a2aa20cd56c4ff32415d2bba36671e67853dfe`.
+Dev18 hosted results are pending. The prior dev17 GT-BE98 results above cover
+the unchanged common firmware sources; further shared/platform integration and
+hardware validation remain outstanding.

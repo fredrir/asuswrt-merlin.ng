@@ -15206,6 +15206,23 @@ void restart_qos_if_bwlim_enabled(void)
 #endif
 }
 
+#if defined(RTCONFIG_OPENVPN) || defined(RTCONFIG_WIREGUARD)
+/* Reset requests must name one valid profile, without atoi's partial parsing. */
+static int vpn_reset_unit(const char *value, int max_unit)
+{
+	char *end;
+	long unit;
+
+	if (!value || value[0] < '0' || value[0] > '9')
+		return 0;
+	errno = 0;
+	unit = strtol(value, &end, 10);
+	if (errno || *end || unit < 1 || unit > max_unit)
+		return 0;
+	return (int)unit;
+}
+#endif
+
 void handle_notifications(void)
 {
 	char nv[256], nvtmp[32], *cmd[8], *script;
@@ -20093,7 +20110,27 @@ retry_wps_enr:
  			start_ovpn_server(openvpn_unit);
  		}
  	}
- #endif
+	else if (strcmp(script, "clearovpnserver") == 0)
+	{
+		int unit = (count == 2) ? vpn_reset_unit(cmd[1], OVPN_SERVER_MAX) : 0;
+		if (unit)
+			reset_ovpn_setting(OVPN_TYPE_SERVER, unit, 1);
+	}
+	else if (strcmp(script, "clearovpnclient") == 0)
+	{
+		int unit = (count == 2) ? vpn_reset_unit(cmd[1], OVPN_CLIENT_MAX) : 0;
+		if (unit)
+			reset_ovpn_setting(OVPN_TYPE_CLIENT, unit, 1);
+	}
+#endif
+#ifdef RTCONFIG_WIREGUARD
+	else if (strcmp(script, "clearwgclient") == 0)
+	{
+		int unit = (count == 2) ? vpn_reset_unit(cmd[1], WG_CLIENT_MAX) : 0;
+		if (unit)
+			reset_wgc_setting(unit);
+	}
+#endif
 #ifdef RTCONFIG_YANDEXDNS
 	else if (strcmp(script, "yadns") == 0)
 	{
@@ -20103,16 +20140,6 @@ retry_wps_enr:
 			stop_dnsmasq(ALL_SDN);
 #else
 			stop_dnsmasq();
-	else if (strcmp(script, "clearovpnserver") == 0)
-	{
-		if (cmd[1])
-			reset_ovpn_setting(OVPN_TYPE_SERVER, atoi(cmd[1]), 1);
-	}
-        else if (strcmp(script, "clearovpnclient") == 0)
-	{
-		if (cmd[1])
-			reset_ovpn_setting(OVPN_TYPE_CLIENT, atoi(cmd[1]), 1);
-	}
 #endif
 		}
 		if (action & RC_SERVICE_START) {

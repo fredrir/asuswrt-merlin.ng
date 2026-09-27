@@ -113,6 +113,15 @@ jobs:
           (cd "$EVIDENCE/firmware" && sha256sum ./*.trx > SHA256SUMS)
           printf '%s\n' 'Experimental CI image; recovery and hardware validation are incomplete. Not ready to flash.' > "$EVIDENCE/firmware/README.txt"
 
+      - name: Test packaged VPN configuration and compiled service dispatch
+        run: |
+          docker build --build-arg "BASE_IMAGE=$BUILDER_IMAGE" \
+            -t rt-be90u-ci-test:3006 - < tools/rt-be90u/tests/Dockerfile \
+            2>&1 | tee "$EVIDENCE/runtime-dependencies.log"
+          python3 tools/rt-be90u/validate-image.py "$RUNNER_TEMP/rt-be90u-rootfs" \
+            --group basic --runtime-image rt-be90u-ci-test:3006 \
+            --logs "$EVIDENCE/basic" --name rt-be90u-ci
+
       - name: Record final disk usage
         if: always()
         run: |
