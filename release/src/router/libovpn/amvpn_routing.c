@@ -1240,6 +1240,11 @@ void amvpn_set_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifname
 					for (i = 1; i < mtl_sz; ++i) {	// Skip first (Default) SDN
 						if ((rgw == OVPN_RGW_POLICY && pmtl[i].sdn_t.vpnc_idx == vpnc_idx) ||
 						    (rgw == OVPN_RGW_ALL && pmtl[i].sdn_t.vpnc_idx == 0)) {
+#ifdef RTCONFIG_SOC_IPQ53XX
+							/* Assigned SDNs own a separate guard from Director policy. */
+							if (rgw == OVPN_RGW_POLICY)
+								snprintf(prio_str, sizeof(prio_str), "%d", VPNDIR_PRIO_KS_SDN);
+#endif
 							eval("ip", "rule", "add", "from", "all", "priority", prio_str,  "iif", pmtl[i].nw_t.ifname, "prohibit");
 							if (verb > 3)
 								logmessage("openvpn-routing", "Setting killswitch rule for SDN %s", pmtl[i].nw_t.ifname);
@@ -1307,6 +1312,9 @@ void amvpn_set_killswitch_rules(vpndir_proto_t proto, int unit, char *sdn_ifname
 
 				for (i = 1; i < mtl_sz; ++i) {	// Skip first (Default) SDN
 					if (pmtl[i].sdn_t.vpnc_idx == vpnc_idx) {
+#ifdef RTCONFIG_SOC_IPQ53XX
+						snprintf(prio_str, sizeof(prio_str), "%d", VPNDIR_PRIO_KS_SDN);
+#endif
 						eval("ip", "rule", "add", "from", "all", "priority", prio_str,  "iif", pmtl[i].nw_t.ifname, "prohibit");
 						if (verb > 3)
 							logmessage("openvpn-routing", "Setting killswitch rule for SDN %s", pmtl[i].nw_t.ifname);

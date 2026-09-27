@@ -172,6 +172,25 @@ done:
                 raise ValueError('Unexpected QCA policy writer baseline')
             qca = qca.replace(before, after)
             qca_adjustments.append('Committed migration policy fallback until a complete atomic JFFS save')
+            before = '''						if ((rgw == OVPN_RGW_POLICY && pmtl[i].sdn_t.vpnc_idx == vpnc_idx) ||
+						    (rgw == OVPN_RGW_ALL && pmtl[i].sdn_t.vpnc_idx == 0)) {
+'''
+            after = before + '''							if (rgw == OVPN_RGW_POLICY)
+								snprintf(prio_str, sizeof(prio_str), "%d", VPNDIR_PRIO_KS_SDN);
+'''
+            if qca.count(before) != 1:
+                raise ValueError('Unexpected QCA OpenVPN SDN guard baseline')
+            qca = qca.replace(before, after)
+            before = '''				for (i = 1; i < mtl_sz; ++i) {	// Skip first (Default) SDN
+					if (pmtl[i].sdn_t.vpnc_idx == vpnc_idx) {
+						eval("ip", "rule", "add", "from", "all", "priority", prio_str,  "iif", pmtl[i].nw_t.ifname, "prohibit");'''
+            after = before.replace('\t\t\t\t\t\teval(',
+                                   '\t\t\t\t\t\tsnprintf(prio_str, sizeof(prio_str), "%d", VPNDIR_PRIO_KS_SDN);\n'
+                                   '\t\t\t\t\t\teval(')
+            if qca.count(before) != 1:
+                raise ValueError('Unexpected QCA WireGuard SDN guard baseline')
+            qca = qca.replace(before, after)
+            qca_adjustments.append('Assigned SDN guards use their own priority, preserving Director/global guard ownership')
         current = (repo / name).read_text()
         checks = 0
         rejected = 0

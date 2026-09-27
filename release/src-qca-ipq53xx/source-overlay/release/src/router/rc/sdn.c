@@ -34,6 +34,128 @@ static int _handle_sdn_routing(const MTLAN_T *pmtl);
  */
 extern VPNC_PROTO vpnc_get_proto_in_profile_by_vpnc_id(const int vpnc_id);
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN) && !defined(RTCONFIG_MULTIWAN_IF)
+#define QCA_SDN_VPN_GUARD
+/* This path owns only the SDN lookup and its interface-wide prohibition.
+ * Director policy guards must survive a refresh without a unit-wide rebuild. */
+static int qca_sdn_vpn_enforced(int index)
+{
+	char prefix[32];
+	int unit, rgw;
+	if (index >= 1 && index <= WG_CLIENT_MAX) {
+		snprintf(prefix, sizeof(prefix), "wgc%d_", index);
+		return nvram_pf_get_int(prefix, "enable") && nvram_pf_get_int(prefix, "enforce");
+	}
+	unit = index - WG_CLIENT_MAX;
+	if (unit < 1 || unit > OVPN_CLIENT_MAX)
+		return 0;
+	snprintf(prefix, sizeof(prefix), "vpn_client%d_", unit);
+	rgw = nvram_pf_get_int(prefix, "rgw");
+	return nvram_pf_get_int(prefix, "enforce") && ovpn_is_client_enabled(unit) &&
+	       (rgw == OVPN_RGW_ALL || rgw == OVPN_RGW_POLICY);
+}
+
+static int qca_sdn_vpn_table(const char *table)
+{
+	char extra, *end;
+	long index;
+	int unit;
+	if (sscanf(table, "wgc%d%c", &unit, &extra) == 1)
+		return unit >= 1 && unit <= WG_CLIENT_MAX ? unit : 0;
+	if (sscanf(table, "ovpnc%d%c", &unit, &extra) == 1)
+		return unit >= 1 && unit <= OVPN_CLIENT_MAX ? unit + WG_CLIENT_MAX : 0;
+	errno = 0;
+	index = strtol(table, &end, 10);
+	return !errno && *table && !*end && index >= 1 &&
+	       index < VPNC_UNIT_BASIC + MAX_VPNC_PROFILE ? index : 0;
+}
+
+static int qca_refresh_sdn_ipv4(const MTLAN_T *pmtl)
+{
+	struct lookup { unsigned int priority; char table[32]; struct lookup *next; };
+	struct lookup *rules = NULL, *rule;
+	FILE *fp;
+	char line[512], iface[IFNAMSIZ], action[32], table[32], extra;
+	char priority[16], guard_priority[16];
+	unsigned int pref;
+	int fields, index, target, guards = 0, protect, failed, lock, result = -1;
+
+	target = pmtl->sdn_t.vpnc_idx;
+	if (!target && nvram_match("lan_ifname", pmtl->nw_t.ifname))
+		target = nvram_get_int("vpnc_default_wan");
+	if (target < 0 || target >= VPNC_UNIT_BASIC + MAX_VPNC_PROFILE)
+		return -1;
+	lock = file_lock(VPNROUTING_LOCK);
+	if (lock < 0)
+		return -1;
+	protect = qca_sdn_vpn_enforced(target);
+	snprintf(guard_priority, sizeof(guard_priority), "%d", VPNDIR_PRIO_KS_SDN);
+	fp = popen("ip rule show", "r");
+	if (!fp)
+		goto done;
+	failed = 0;
+	while (fgets(line, sizeof(line), fp)) {
+		fields = sscanf(line, "%u: from all iif %15s %31s %31s %c", &pref, iface, action, table, &extra);
+		if (fields < 3 || strcmp(iface, pmtl->nw_t.ifname))
+			continue;
+		if (fields == 3 && !strcmp(action, "prohibit") && pref == VPNDIR_PRIO_KS_SDN) {
+			++guards;
+			continue;
+		}
+		if (fields != 4 || strcmp(action, "lookup") || !(index = qca_sdn_vpn_table(table)))
+			continue;
+		if (pref != IP_RULE_PREF_VPNC_POLICY_IF + index * 3 &&
+		    !(pref == IP_RULE_PREF_DEFAULT_CONN && pmtl->sdn_t.sdn_idx == 0))
+			continue;
+		rule = malloc(sizeof(*rule));
+		if (!rule) { failed = 1; break; }
+		rule->priority = pref;
+		strlcpy(rule->table, table, sizeof(rule->table));
+		rule->next = rules;
+		rules = rule;
+	}
+	failed |= ferror(fp);
+	if (pclose(fp)) failed = 1;
+	if (failed)
+		goto done;
+	/* Keep an effective guard at every command boundary, including when no
+	 * tunnel route exists. Never clear Director guards to refresh this SDN. */
+	if (protect && !guards) {
+		if (eval("ip", "rule", "add", "from", "all", "iif", (char *)pmtl->nw_t.ifname,
+		         "priority", guard_priority, "prohibit"))
+			goto done;
+		guards = 1;
+	}
+	for (rule = rules; rule; rule = rule->next) {
+		snprintf(priority, sizeof(priority), "%u", rule->priority);
+		if (eval("ip", "rule", "del", "from", "all", "iif", (char *)pmtl->nw_t.ifname,
+		         "table", rule->table, "priority", priority))
+			goto done;
+	}
+	if (target) {
+		snprintf(table, sizeof(table), "%d", target);
+		snprintf(priority, sizeof(priority), "%d", pmtl->sdn_t.sdn_idx ?
+		         IP_RULE_PREF_VPNC_POLICY_IF + target * 3 : IP_RULE_PREF_DEFAULT_CONN);
+		if (eval("ip", "rule", "add", "from", "all", "iif", (char *)pmtl->nw_t.ifname,
+		         "table", table, "priority", priority))
+			goto done;
+	}
+	/* Remove duplicates while retaining one guard, or release protection only
+	 * after the intentionally unprotected lookup state has been established. */
+	while (guards > protect) {
+		if (eval("ip", "rule", "del", "from", "all", "iif", (char *)pmtl->nw_t.ifname,
+		         "priority", guard_priority, "prohibit"))
+			goto done;
+		--guards;
+	}
+	result = 0;
+done:
+	while (rules) { rule = rules; rules = rule->next; free(rule); }
+	file_unlock(lock);
+	return result;
+}
+#endif
+
 int handle_sdn_feature(const int sdn_idx, const unsigned long features, const int action)
 {
 	FILE *fp_filter = NULL, *fp_nat = NULL, *fp_mangle = NULL;
@@ -994,6 +1116,9 @@ int update_sdn_by_vpnc(const int vpnc_idx)
 		MTLAN_T *pmtl = NULL;
 	size_t mtl_sz = 0;
 	int i, default_vpnc;
+#ifdef QCA_SDN_VPN_GUARD
+	int result = 0;
+#endif
 	char logaccept[32], logdrop[32];
 	
 	default_vpnc = nvram_get_int("vpnc_default_wan");
@@ -1013,12 +1138,20 @@ int update_sdn_by_vpnc(const int vpnc_idx)
 			if((pmtl[i].sdn_t.vpnc_idx == vpnc_idx) || //match vpnc idx
 				(default_vpnc != 0 && vpnc_idx == default_vpnc))	//defualt wan is vpnc and sdn use default wan
 			{
+#ifdef QCA_SDN_VPN_GUARD
+				if (_handle_sdn_wan(&pmtl[i], logdrop, logaccept)) result = -1;
+#else
 				_handle_sdn_wan(&pmtl[i], logdrop, logaccept);
+#endif
 			}
 		}
 		FREE_MTLAN((void *)pmtl);
 	}
+#ifdef QCA_SDN_VPN_GUARD
+	return result;
+#else
 	return 0;
+#endif
 }
 
 #ifdef RTCONFIG_MULTIWAN_IF
@@ -1401,7 +1534,14 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 	amvpn_refresh_ipv6_killswitch();
 #endif
 
+#ifdef QCA_SDN_VPN_GUARD
+	if (qca_refresh_sdn_ipv4(pmtl)) {
+		logmessage("sdn", "VPN routing refresh failed; existing protection retained");
+		return -1;
+	}
+#else
 	_remove_sdn_routing_rule(pmtl, 0);
+#endif
 #ifdef RTCONFIG_IPV6
 	_remove_sdn_routing_rule(pmtl, 1);
 #endif
@@ -1415,10 +1555,12 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 			snprintf(pref, sizeof(pref), "%d", IP_RULE_PREF_VPNC_POLICY_IF + pmtl->sdn_t.vpnc_idx * 3);
 		else
 			snprintf(pref, sizeof(pref), "%d", IP_RULE_PREF_DEFAULT_CONN);
+#ifndef QCA_SDN_VPN_GUARD
 		eval("ip", "rule", "add", "iif", (char*)pmtl->nw_t.ifname, "table", table, "pref", pref);
 		VPN_VPNX_T vpnx;
 		if (get_vpnx_by_vpnc_idx(&vpnx, pmtl->sdn_t.vpnc_idx) && vpnx.proto == VPN_PROTO_OVPN)
 			amvpn_set_killswitch_rules(VPNDIR_PROTO_OPENVPN, vpnx.unit, (char *)pmtl->nw_t.ifname);
+#endif
 
 #ifdef RTCONFIG_IPV6
 		_remove_sdn_routing_rule(pmtl, 1);
@@ -1515,7 +1657,9 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 		{
 			snprintf(table, sizeof(table), "%d", IP_ROUTE_TABLE_ID_VPNC_BASE + vpnc_default_wan);
 			snprintf(pref, sizeof(pref), "%d", IP_RULE_PREF_DEFAULT_CONN);
+#ifndef QCA_SDN_VPN_GUARD
 			eval("ip", "rule", "add", "iif", (char*)pmtl->nw_t.ifname, "table", table, "pref", pref);
+#endif
 #if defined(RTCONFIG_IPV6) && defined(RTCONFIG_VPN_FUSION)
 			if(ipv6_enabled() && pmtl->nw_t.v6_enable)
 			{

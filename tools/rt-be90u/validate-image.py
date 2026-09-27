@@ -38,6 +38,7 @@ def main():
                   ('ovpn-wrappers', 'run-ovpn-wrappers-test.sh', [], 'basic'),
                   ('wg-import', 'run-wg-import-test.sh', [], 'basic')],
         'network': [('network', 'run-vpn-network-test.sh', [], 'net'),
+                    ('sdn-refresh', 'run-sdn-refresh-test.sh', [], 'net'),
                     ('wg-export', 'run-wg-export-test.sh', [], 'net'),
                     ('wg-tunnel', 'run-wg-tunnel-test.sh', [], 'tunnel')],
         'openvpn': [('tunnel-' + mode, 'run-vpn-tunnel-test.sh', ['--mode', mode], 'tunnel')
