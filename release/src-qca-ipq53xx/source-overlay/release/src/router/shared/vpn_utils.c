@@ -6,8 +6,209 @@
 #include <syslog.h>
 #include <shared.h>
 #include <vpn_utils.h>
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+#include <qca_vpn_deferred.h>
+#endif
 #ifdef RTCONFIG_OPENVPN
 #include <openvpn_config.h>
+#endif
+
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+/* A raw stock reference must not select a physically different fixed Merlin
+ * slot while conversion is incomplete. Provider-only lists also retain the
+ * stock namespace even when the ordinary converter has nothing to convert.
+ * Fresh Merlin state has neither a stock list nor a marker. Explicit Director
+ * targets never call this helper. Unknown schema versions remain unresolved. */
+int qca_vpn_binding_deferred(int index)
+{
+	const char *version;
+	if (index <= 0) return 0;
+	version = nvram_safe_get("qca_merlin_vpn_migrated");
+	if (!strcmp(version, "1")) return 0;
+	return *version || *nvram_safe_get("vpnc_clientlist");
+}
+
+static int qca_vpn_decimal(const char *value, unsigned int maximum)
+{
+	unsigned int result = 0;
+	if (!value || !*value) return -1;
+	for (; *value; ++value) {
+		if (*value < '0' || *value > '9') return -1;
+		result = result * 10 + *value - '0';
+		if (result > maximum) return -1;
+	}
+	return result;
+}
+
+int qca_vpn_sdn_deferred(int sdn_idx, int parsed_target)
+{
+	const char *fallback;
+	char *copy, *cursor, *row, *part;
+	int field, index, found = 0, deferred = 0;
+	if (!qca_vpn_binding_deferred(1)) return 0;
+	copy = strdup(nvram_safe_get("sdn_rl"));
+	if (!copy) return 1;
+	cursor = copy;
+	while ((row = strsep(&cursor, "<"))) {
+		if (!*row) continue;
+		part = strsep(&row, ">");
+		if (qca_vpn_decimal(part, 255) != sdn_idx) continue;
+		found = 1;
+		for (field = 1; field <= 6 && row; ++field) part = strsep(&row, ">");
+		if (field != 7) { deferred = 1; continue; }
+		index = qca_vpn_decimal(part, 20);
+		if (index != 0) deferred = 1; /* Positive or malformed retained target. */
+	}
+	free(copy);
+	if (deferred || (!found && parsed_target != 0)) return 1;
+	if (sdn_idx != 0) return 0;
+	fallback = nvram_safe_get("vpnc_default_wan");
+	return *fallback && qca_vpn_decimal(fallback, 20) != 0;
+}
+
+static int qca_vpn_selector(const char *value, char *output, size_t size)
+{
+	char address[INET6_ADDRSTRLEN + 4], *prefix;
+	unsigned char binary[sizeof(struct in6_addr)];
+	int family;
+	if (!*value) { *output = '\0'; return AF_UNSPEC; }
+	if (strlen(value) >= sizeof(address) || strlen(value) >= size) return -1;
+	strcpy(address, value);
+	prefix = strchr(address, '/');
+	if (prefix) *prefix++ = '\0';
+	if (inet_pton(AF_INET, address, binary) == 1) family = AF_INET;
+	else if (inet_pton(AF_INET6, address, binary) == 1) family = AF_INET6;
+	else return -1;
+	if (prefix && qca_vpn_decimal(prefix, family == AF_INET ? 32 : 128) < 0) return -1;
+	strcpy(output, value);
+	return family;
+}
+
+static int qca_vpn_lan_interface(const char *name)
+{
+	MTLAN_T *mtlan;
+	size_t count = 0, i;
+	int found = 0;
+	if (*name && !strcmp(name, nvram_safe_get("lan_ifname"))) return 1;
+	mtlan = (MTLAN_T *)INIT_MTLAN(sizeof(MTLAN_T));
+	if (!mtlan) return 0;
+	if (get_mtlan(mtlan, &count))
+		for (i = 0; i < count; ++i)
+			if (*name && !strcmp(name, mtlan[i].nw_t.ifname)) { found = 1; break; }
+	FREE_MTLAN((void *)mtlan);
+	return found;
+}
+
+static int qca_vpn_deferred_parse(int (*callback)(const struct qca_vpn_deferred_policy *, void *),
+	void *arg, int include_wan)
+{
+	struct qca_vpn_deferred_policy *policies = NULL;
+	const char *source = nvram_safe_get("vpnc_dev_policy_list");
+	char *copy = NULL, *cursor, *row, *parts[5], *field;
+	int count = 0, records = 0, unresolved = 0, result = -1, n, active, index, src_family, dst_family, i;
+	if (!callback) return -1;
+	if (!qca_vpn_binding_deferred(1) || !*source) return 0;
+	if (strlen(source) >= 8192) return 1;
+	copy = strdup(source);
+	policies = calloc(MAX_DEV_POLICY * 2, sizeof(*policies));
+	if (!copy || !policies) goto done;
+	cursor = copy;
+	while ((row = strsep(&cursor, "<"))) {
+		struct qca_vpn_deferred_policy *policy;
+		if (!*row) continue;
+		if (++records > MAX_DEV_POLICY) { unresolved = 1; break; }
+		n = 0;
+		while ((field = strsep(&row, ">"))) {
+			if (n == 5) goto invalid;
+			parts[n++] = field;
+		}
+		if (n < 4) goto invalid;
+		active = qca_vpn_decimal(parts[0], 1);
+		if (active < 0) goto invalid;
+		if (!active) continue;
+		index = qca_vpn_decimal(parts[3], 20);
+		if (index < 0) goto invalid;
+		if (!index && !include_wan) continue; /* Explicit stock WAN remains independent. */
+		policy = &policies[count];
+		policy->index = index;
+		src_family = qca_vpn_selector(parts[1], policy->src, sizeof(policy->src));
+		dst_family = qca_vpn_selector(parts[2], policy->dst, sizeof(policy->dst));
+		if (src_family < 0 || dst_family < 0 ||
+		    (src_family != AF_UNSPEC && dst_family != AF_UNSPEC && src_family != dst_family)) goto invalid;
+		policy->family = src_family != AF_UNSPEC ? src_family : dst_family;
+		if (n == 5 && *parts[4]) {
+			if (strlen(parts[4]) >= sizeof(policy->iif)) goto invalid;
+			for (field = parts[4]; *field; ++field)
+				if (!isalnum((unsigned char)*field) && *field != '_' && *field != '-' && *field != '.') goto invalid;
+			if (!qca_vpn_lan_interface(parts[4])) goto invalid;
+			strcpy(policy->iif, parts[4]);
+		}
+		++count;
+		/* Stock applies source and interface branches independently.
+		 * Preserve that union, retaining the full destination selector. */
+		if (*policy->src && *policy->iif) {
+			policies[count] = *policy;
+			policies[count].src[0] = '\0';
+			policies[count].family = dst_family;
+			++count;
+			policy->iif[0] = '\0';
+		}
+		continue;
+invalid:
+		unresolved = 1;
+		memset(&policies[count], 0, sizeof(*policies));
+	}
+	for (i = 0; i < count; ++i)
+		if (callback(&policies[i], arg)) goto done;
+	result = unresolved;
+done:
+	free(copy); free(policies);
+	return result;
+}
+
+int qca_vpn_deferred_foreach(int (*callback)(const struct qca_vpn_deferred_policy *, void *), void *arg)
+{
+	return qca_vpn_deferred_parse(callback, arg, 0);
+}
+
+struct qca_vpn_wan_match {
+	const char *src, *iif;
+	int found;
+};
+
+static int qca_vpn_same_source(const char *left, const char *right)
+{
+	char a[INET6_ADDRSTRLEN + 4], b[INET6_ADDRSTRLEN + 4], *slash;
+	unsigned char address_a[16], address_b[16];
+	int family, other, bits_a, bits_b, i;
+	if (!strcmp(left, right)) return 1;
+	family = qca_vpn_selector(left, a, sizeof(a));
+	other = qca_vpn_selector(right, b, sizeof(b));
+	if (family <= AF_UNSPEC || family != other) return 0;
+	bits_a = bits_b = family == AF_INET ? 32 : 128;
+	if ((slash = strchr(a, '/'))) { *slash++ = '\0'; bits_a = atoi(slash); }
+	if ((slash = strchr(b, '/'))) { *slash++ = '\0'; bits_b = atoi(slash); }
+	if (bits_a != bits_b || inet_pton(family, a, address_a) != 1 || inet_pton(family, b, address_b) != 1) return 0;
+	for (i = 0; i < bits_a; ++i)
+		if ((address_a[i / 8] ^ address_b[i / 8]) & (0x80 >> (i % 8))) return 0;
+	return 1;
+}
+
+static int qca_vpn_wan_match(const struct qca_vpn_deferred_policy *policy, void *arg)
+{
+	struct qca_vpn_wan_match *match = arg;
+	if (policy->index) return 0;
+	if ((match->src && *match->src && qca_vpn_same_source(match->src, policy->src)) ||
+	    (match->iif && *match->iif && !strcmp(match->iif, policy->iif))) match->found = 1;
+	return 0;
+}
+
+int qca_vpn_deferred_wan_override(const char *src, const char *iif)
+{
+	struct qca_vpn_wan_match match = { src, iif, 0 };
+	if (qca_vpn_deferred_parse(qca_vpn_wan_match, &match, 1) < 0) return -1;
+	return match.found;
+}
 #endif
 
 #if defined(RTCONFIG_VPN_FUSION) || defined(RTCONFIG_TPVPN) || defined(RTCONFIG_IG_SITE2SITE) || defined(RTCONFIG_WIREGUARD)

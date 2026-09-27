@@ -20051,6 +20051,12 @@ retry_wps_enr:
 				unit = 0;
 
 			lock = file_lock(VPNROUTING_LOCK);
+#ifdef RTCONFIG_SOC_IPQ53XX
+			if (lock < 0)
+				logmessage("vpndirector", "Cannot lock VPN routing refresh");
+			else if (amvpn_refresh_policy_rules_locked(unit))
+				logmessage("vpndirector", "VPN routing refresh failed; previous protection retained");
+#else
 			if (unit == 0) {
 				amvpn_set_wan_routing_rules();
 #ifdef RTCONFIG_WIREGUARD
@@ -20081,6 +20087,7 @@ retry_wps_enr:
 				// Refresh prerouting rules to ensure correct order
 				amvpn_update_exclusive_dns_rules();
 			}
+#endif
 			file_unlock(lock);
 		}
 	}

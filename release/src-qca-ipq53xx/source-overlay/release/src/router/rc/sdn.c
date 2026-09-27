@@ -15,6 +15,10 @@
 #ifdef RTCONFIG_MULTIWAN_IF
 #include "multi_wan.h"
 #endif
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+#include <qca_vpn_deferred.h>
+#include <amvpn_deferred.h>
+#endif
 #if defined(RTCONFIG_DNSFILTER)
 #include "dnsfilter.h"
 #endif
@@ -42,6 +46,7 @@ static int qca_sdn_vpn_enforced(int index)
 {
 	char prefix[32];
 	int unit, rgw;
+	if (qca_vpn_binding_deferred(index)) return 1;
 	if (index >= 1 && index <= WG_CLIENT_MAX) {
 		snprintf(prefix, sizeof(prefix), "wgc%d_", index);
 		return nvram_pf_get_int(prefix, "enable") && nvram_pf_get_int(prefix, "enforce");
@@ -70,6 +75,49 @@ static int qca_sdn_vpn_table(const char *table)
 	       index < VPNC_UNIT_BASIC + MAX_VPNC_PROFILE ? index : 0;
 }
 
+static int qca_sdn_cleanup_ambiguous(const MTLAN_T *pmtl, int v6)
+{
+	FILE *fp;
+	char line[512], iface[IFNAMSIZ], table[32], action[32], extra, *iif;
+	unsigned int priority, protocol;
+	int index, result = 0;
+
+	fp = popen(v6 ? "ip -6 -N -details rule show" : "ip -4 -N -details rule show", "r");
+	if (!fp) return -1;
+	while (fgets(line, sizeof(line), fp)) {
+		if (!strchr(line, '\n')) { result = -1; break; }
+		if (sscanf(line, "%u:", &priority) != 1 || !(iif = strstr(line, " iif ")) ||
+		    sscanf(iif + 5, "%15s", iface) != 1 || strcmp(iface, pmtl->nw_t.ifname))
+			continue;
+		index = priority >= IP_RULE_PREF_VPNC_POLICY_IF ? (priority - IP_RULE_PREF_VPNC_POLICY_IF) / 3 : 0;
+		if (!(index >= 1 && index < VPNC_UNIT_BASIC + MAX_VPNC_PROFILE &&
+		      priority == IP_RULE_PREF_VPNC_POLICY_IF + index * 3) &&
+		    !(priority == IP_RULE_PREF_DEFAULT_CONN && pmtl->sdn_t.sdn_idx == 0) &&
+		    (v6 || priority != VPNDIR_PRIO_KS_SDN))
+			continue;
+		if (sscanf(line, "%u: from all iif %15s lookup %31s proto %u %c",
+		           &priority, iface, table, &protocol, &extra) == 4 && !protocol &&
+		    (index = qca_sdn_vpn_table(table)) &&
+		    (priority == IP_RULE_PREF_VPNC_POLICY_IF + index * 3 ||
+		     (priority == IP_RULE_PREF_DEFAULT_CONN && pmtl->sdn_t.sdn_idx == 0)))
+			continue;
+		if (!v6 && sscanf(line, "%u: from all iif %15s %31s proto %u %c",
+		                  &priority, iface, action, &protocol, &extra) == 4 &&
+		    priority == VPNDIR_PRIO_KS_SDN && !protocol &&
+		    (!strcmp(action, "8") || !strcmp(action, "prohibit")))
+			continue;
+		/* Protocol 0 and omitted selectors are deletion wildcards, even
+		 * when explicitly supplied. Keep foreign rules and existing guards. */
+		logmessage("sdn", "Foreign IPv%d rule prevents safe VPN cleanup on %s at priority %u",
+		           v6 ? 6 : 4, pmtl->nw_t.ifname, priority);
+		result = -1;
+		break;
+	}
+	if (ferror(fp)) result = -1;
+	if (pclose(fp)) result = -1;
+	return result;
+}
+
 static int qca_refresh_sdn_ipv4(const MTLAN_T *pmtl)
 {
 	struct lookup { unsigned int priority; char table[32]; struct lookup *next; };
@@ -78,17 +126,18 @@ static int qca_refresh_sdn_ipv4(const MTLAN_T *pmtl)
 	char line[512], iface[IFNAMSIZ], action[32], table[32], extra;
 	char priority[16], guard_priority[16];
 	unsigned int pref;
-	int fields, index, target, guards = 0, protect, failed, lock, result = -1;
+	int fields, index, target, guards = 0, protect, deferred, failed, result = -1;
 
 	target = pmtl->sdn_t.vpnc_idx;
 	if (!target && nvram_match("lan_ifname", pmtl->nw_t.ifname))
 		target = nvram_get_int("vpnc_default_wan");
-	if (target < 0 || target >= VPNC_UNIT_BASIC + MAX_VPNC_PROFILE)
+	if (!pmtl->enable)
+		target = 0;
+	deferred = pmtl->enable && qca_vpn_sdn_deferred(pmtl->sdn_t.sdn_idx, target);
+	if (!deferred && (target < 0 || target >= VPNC_UNIT_BASIC + MAX_VPNC_PROFILE))
 		return -1;
-	lock = file_lock(VPNROUTING_LOCK);
-	if (lock < 0)
-		return -1;
-	protect = qca_sdn_vpn_enforced(target);
+	protect = deferred || qca_sdn_vpn_enforced(target);
+	if (qca_sdn_cleanup_ambiguous(pmtl, 0)) return -1;
 	snprintf(guard_priority, sizeof(guard_priority), "%d", VPNDIR_PRIO_KS_SDN);
 	fp = popen("ip rule show", "r");
 	if (!fp)
@@ -132,7 +181,7 @@ static int qca_refresh_sdn_ipv4(const MTLAN_T *pmtl)
 		         "table", rule->table, "priority", priority))
 			goto done;
 	}
-	if (target) {
+	if (target && !deferred) {
 		snprintf(table, sizeof(table), "%d", target);
 		snprintf(priority, sizeof(priority), "%d", pmtl->sdn_t.sdn_idx ?
 		         IP_RULE_PREF_VPNC_POLICY_IF + target * 3 : IP_RULE_PREF_DEFAULT_CONN);
@@ -151,9 +200,54 @@ static int qca_refresh_sdn_ipv4(const MTLAN_T *pmtl)
 	result = 0;
 done:
 	while (rules) { rule = rules; rules = rule->next; free(rule); }
-	file_unlock(lock);
 	return result;
 }
+
+#ifdef RTCONFIG_IPV6
+static int qca_clear_sdn_ipv6_lookups(const MTLAN_T *pmtl)
+{
+	struct lookup { unsigned int priority; char table[32]; struct lookup *next; };
+	struct lookup *rules = NULL, *rule;
+	FILE *fp;
+	char line[512], iface[IFNAMSIZ], table[32], extra, priority[16];
+	unsigned int pref;
+	int index, failed = 0, result = -1;
+
+	if (qca_sdn_cleanup_ambiguous(pmtl, 1)) return -1;
+	fp = popen("ip -6 rule show", "r");
+	if (!fp) return -1;
+	while (fgets(line, sizeof(line), fp)) {
+		if (!strchr(line, '\n')) { failed = 1; break; }
+		if (sscanf(line, "%u: from all iif %15s lookup %31s %c", &pref, iface, table, &extra) != 3 ||
+		    strcmp(iface, pmtl->nw_t.ifname) || !(index = qca_sdn_vpn_table(table)))
+			continue;
+		if (pref != IP_RULE_PREF_VPNC_POLICY_IF + index * 3 &&
+		    !(pref == IP_RULE_PREF_DEFAULT_CONN && pmtl->sdn_t.sdn_idx == 0))
+			continue;
+		rule = malloc(sizeof(*rule));
+		if (!rule) { failed = 1; break; }
+		rule->priority = pref;
+		strlcpy(rule->table, table, sizeof(rule->table));
+		rule->next = rules;
+		rules = rule;
+	}
+	failed |= ferror(fp);
+	if (pclose(fp)) failed = 1;
+	if (failed) goto done;
+	/* Source-scoped deferred and Director guards may protect this same SDN
+	 * even when its own VPN binding is unset. Never remove them by iif. */
+	for (rule = rules; rule; rule = rule->next) {
+		snprintf(priority, sizeof(priority), "%u", rule->priority);
+		if (eval("ip", "-6", "rule", "del", "from", "all", "iif", (char *)pmtl->nw_t.ifname,
+		         "table", rule->table, "priority", priority))
+			goto done;
+	}
+	result = 0;
+done:
+	while (rules) { rule = rules; rules = rule->next; free(rule); }
+	return result;
+}
+#endif
 #endif
 
 int handle_sdn_feature(const int sdn_idx, const unsigned long features, const int action)
@@ -171,6 +265,9 @@ int handle_sdn_feature(const int sdn_idx, const unsigned long features, const in
 	int i;
 	char logaccept[32], logdrop[32];
 	int restart_all_sdn;
+#ifdef QCA_SDN_VPN_GUARD
+	int result = 0;
+#endif
 	bool processed_nw_idx[MTLAN_MAXINUM] = {false};
 
 	//_dprintf("[%s, %d]<%d, %x, %d>\n", __FUNCTION__, __LINE__, sdn_idx, features, action);
@@ -219,7 +316,11 @@ int handle_sdn_feature(const int sdn_idx, const unsigned long features, const in
 			if (features & SDN_FEATURE_WAN)
 			{
 				_dprintf("[%s][%d]DO: SDN WAN\n", __FUNCTION__, pmtl[i].sdn_t.sdn_idx);
+#ifdef QCA_SDN_VPN_GUARD
+				if (_handle_sdn_wan(&pmtl[i], logdrop, logaccept)) result = -1;
+#else
 				_handle_sdn_wan(&pmtl[i], logdrop, logaccept);
+#endif
 				if (pmtl[i].sdn_t.sdn_idx == 0)	//LAN
 					update_resolvconf();
 #ifdef RTCONFIG_MULTIWAN_PROFILE
@@ -284,7 +385,14 @@ int handle_sdn_feature(const int sdn_idx, const unsigned long features, const in
 			if (features & SDN_FEATURE_VPNC)
 			{
 				// set routing rule
+#ifdef QCA_SDN_VPN_GUARD
+				/* Reconcile the selected SDN even after its assignment becomes
+				 * zero; unit-oriented updates cannot express that removal. */
+				if (!(features & SDN_FEATURE_WAN))
+					if (_handle_sdn_wan(&pmtl[i], logdrop, logaccept)) result = -1;
+#else
 				update_sdn_by_vpnc(pmtl[i].sdn_t.vpnc_idx);
+#endif
 			}
 			if (features & SDN_FEATURE_ALL_FIREWALL)
 			{
@@ -352,7 +460,11 @@ int handle_sdn_feature(const int sdn_idx, const unsigned long features, const in
 #endif
 
 		FREE_MTLAN((void *)pmtl);
+#ifdef QCA_SDN_VPN_GUARD
+		return result;
+#else
 		return 0;
+#endif
 	}
 	return -1;
 }
@@ -455,6 +567,15 @@ void _start_sdn_stubby(const MTLAN_T *pmtl, char *config_file, const size_t path
 	if (!pmtl || !config_file)
 		return;
 
+#ifdef QCA_SDN_VPN_GUARD
+	/* dnsmasq also calls this entry directly, outside _handle_sdn_stubby. */
+	if (qca_vpn_sdn_deferred(pmtl->sdn_t.sdn_idx, pmtl->sdn_t.vpnc_idx)) {
+		snprintf(buf, sizeof(buf), sdn_stubby_pid_path, pmtl->nw_t.idx);
+		kill_pidfile_tk(buf);
+		unlink(buf);
+		return;
+	}
+#endif
 	if (getpid() != 1) {
 		notify_rc("start_stubby");
 		return;
@@ -623,11 +744,21 @@ void _start_sdn_stubby(const MTLAN_T *pmtl, char *config_file, const size_t path
 static int _handle_sdn_stubby(const MTLAN_T *pmtl, const int action)
 {
 	char config_path[128] = "";
+#ifdef QCA_SDN_VPN_GUARD
+	int deferred;
+#endif
 
 	if (!pmtl)
 		return -1;
+#ifdef QCA_SDN_VPN_GUARD
+	deferred = qca_vpn_sdn_deferred(pmtl->sdn_t.sdn_idx, pmtl->sdn_t.vpnc_idx);
+#endif
 
-	if (action & RC_SERVICE_STOP)
+	if ((action & RC_SERVICE_STOP)
+#ifdef QCA_SDN_VPN_GUARD
+	    || deferred
+#endif
+	   )
 	{
 		_dprintf("[%s][%d] SDN stubby-%d STOP\n", __FUNCTION__, pmtl->sdn_t.sdn_idx, pmtl->nw_t.idx);
 		snprintf(config_path, sizeof(config_path), sdn_stubby_pid_path, pmtl->nw_t.idx);
@@ -635,7 +766,11 @@ static int _handle_sdn_stubby(const MTLAN_T *pmtl, const int action)
 		unlink(config_path);
 	}
 
-	if (action & RC_SERVICE_START)
+	if ((action & RC_SERVICE_START)
+#ifdef QCA_SDN_VPN_GUARD
+	    && !deferred
+#endif
+	   )
 	{
 		if (pmtl->enable)
 		{
@@ -653,6 +788,9 @@ static int _gen_sdn_dnsmasq_conf(const MTLAN_T *pmtl, char *config_file, const s
 	FILE *fp;
 	char resolv_path[64], buf[32];
 	int resolv_flag = 0, n;
+#ifdef QCA_SDN_VPN_GUARD
+	int deferred;
+#endif
 #if defined(RTCONFIG_DNSFILTER)
 	int count;
 	dnsf_srv_entry_t dnsfsrv;
@@ -664,9 +802,25 @@ static int _gen_sdn_dnsmasq_conf(const MTLAN_T *pmtl, char *config_file, const s
 
 	if (!pmtl || !config_file)
 		return -1;
+#ifdef QCA_SDN_VPN_GUARD
+	deferred = qca_vpn_sdn_deferred(pmtl->sdn_t.sdn_idx, pmtl->sdn_t.vpnc_idx);
+	if (deferred) {
+		/* Never reuse a fixed client's resolver file for an unresolved stock
+		 * index, nor fall back to WAN resolvers for this SDN. */
+		snprintf(resolv_path, sizeof(resolv_path), "/tmp/resolv.sdn-deferred%d", pmtl->sdn_t.sdn_idx);
+		fp = fopen(resolv_path, "w");
+		if (!fp) return -1;
+		if (fclose(fp)) return -1;
+		resolv_flag = 1;
+	}
+#endif
 
 #ifdef RTCONFIG_VPN_FUSION
-	if(pmtl->sdn_t.vpnc_idx != 0)
+	if(pmtl->sdn_t.vpnc_idx != 0
+#ifdef QCA_SDN_VPN_GUARD
+	   && !deferred
+#endif
+	  )
 	{
 		snprintf(resolv_path, sizeof(resolv_path), vpnc_resolv_path, pmtl->sdn_t.vpnc_idx);
 		if (!access(resolv_path, F_OK))
@@ -940,15 +1094,24 @@ static int _gen_sdn_dnsmasq_conf(const MTLAN_T *pmtl, char *config_file, const s
 		// TODO: TR-069 related.
 
 #ifdef RTCONFIG_OPENVPN
+#ifdef QCA_SDN_VPN_GUARD
+		if (!deferred)
+#endif
 		write_ovpn_client_dnsmasq_config(fp);
 #endif
 
 		// TODO: Set VPN server
 
 		snprintf(buf, sizeof(buf), "dnsmasq-%d.conf", pmtl->sdn_t.sdn_idx);
+#ifdef QCA_SDN_VPN_GUARD
+		if (!deferred)
+#endif
 		append_custom_config(buf, fp);
 		fclose(fp);
 		snprintf(buf, sizeof(buf), "%d", pmtl->sdn_t.sdn_idx);
+#ifdef QCA_SDN_VPN_GUARD
+		if (!deferred)
+#endif
 		run_custom_script("dnsmasq-sdn.postconf", 120, config_file, buf);
 		return 0;
 	}
@@ -961,6 +1124,9 @@ static int _handle_sdn_dnsmasq(const MTLAN_T *pmtl, const int action)
 
 	if (!pmtl)
 		return -1;
+#ifdef QCA_SDN_VPN_GUARD
+	if ((action & RC_SERVICE_START) && amvpn_refresh_deferred()) return -1;
+#endif
 
 	if (action & RC_SERVICE_STOP)
 	{
@@ -1522,13 +1688,53 @@ static void _handle_sdn_ms_wan(const MTLAN_T *pmtl)
 }
 #endif
 
+#ifdef QCA_SDN_VPN_GUARD
+static int _handle_sdn_wan_unlocked(const MTLAN_T *pmtl, const char *logdrop, const char *logaccept);
+
 static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char *logaccept)
+{
+	MTLAN_T *current;
+	size_t count = 0, i;
+	int lock, result = -1;
+	if (!pmtl) return -1;
+	lock = file_lock(VPNROUTING_LOCK);
+	if (lock < 0) return -1;
+	/* The deferred helper quarantines affected traffic before retiring unsafe
+	 * stock lookups. A failure keeps that protection and stops this refresh. */
+	if (amvpn_refresh_deferred_locked()) { file_unlock(lock); return -1; }
+	current = (MTLAN_T *)INIT_MTLAN(sizeof(MTLAN_T));
+	if (current) {
+		/* A callback can wait behind a newer configuration transaction.
+		 * Re-read by stable SDN index only after obtaining the routing lock. */
+		if (get_mtlan_by_idx(SDNFT_TYPE_SDN, pmtl->sdn_t.sdn_idx, current, &count) && count) {
+			result = 0;
+			for (i = 0; i < count; ++i)
+				if (_handle_sdn_wan_unlocked(&current[i], logdrop, logaccept)) result = -1;
+		}
+		/* A disappeared record is left for the explicit SDN removal path;
+		 * an old callback must never re-create its routing state. */
+		FREE_MTLAN((void *)current);
+	}
+	file_unlock(lock);
+	return result;
+}
+
+static int _handle_sdn_wan_unlocked(const MTLAN_T *pmtl, const char *logdrop, const char *logaccept)
+#else
+static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char *logaccept)
+#endif
 {
 	int vpnc_default_wan, assigned_wan = 0;
 	char table[32], pref[32];
+#ifdef QCA_SDN_VPN_GUARD
+	int deferred;
+#endif
 
 	if (!pmtl)
 		return -1;
+#ifdef QCA_SDN_VPN_GUARD
+	deferred = qca_vpn_sdn_deferred(pmtl->sdn_t.sdn_idx, pmtl->sdn_t.vpnc_idx);
+#endif
 
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_IPV6) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 	amvpn_refresh_ipv6_killswitch();
@@ -1543,11 +1749,21 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 	_remove_sdn_routing_rule(pmtl, 0);
 #endif
 #ifdef RTCONFIG_IPV6
+#ifdef QCA_SDN_VPN_GUARD
+	/* Deferred reconciliation already retired unsafe lookups while keeping
+	 * its owned IPv6 guards. Broad iif cleanup would remove those guards. */
+	if (!deferred && qca_clear_sdn_ipv6_lookups(pmtl)) return -1;
+#else
 	_remove_sdn_routing_rule(pmtl, 1);
+#endif
 #endif
 	vpnc_default_wan = nvram_get_int("vpnc_default_wan");
 
-	if(pmtl->sdn_t.vpnc_idx != 0)	//assigned vpnc
+	if(pmtl->sdn_t.vpnc_idx != 0
+#ifdef QCA_SDN_VPN_GUARD
+	   && !deferred
+#endif
+	  )	//assigned vpnc
 	{
 		//get table id and pref
 		snprintf(table, sizeof(table), "%d", IP_ROUTE_TABLE_ID_VPNC_BASE + pmtl->sdn_t.vpnc_idx);
@@ -1563,7 +1779,9 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 #endif
 
 #ifdef RTCONFIG_IPV6
+#ifndef QCA_SDN_VPN_GUARD
 		_remove_sdn_routing_rule(pmtl, 1);
+#endif
 #ifdef RTCONFIG_VPN_FUSION
 		if(ipv6_enabled() && pmtl->nw_t.v6_enable)
 		{
@@ -1653,7 +1871,11 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 
 	if(!assigned_wan)
 	{
-		if(vpnc_default_wan && nvram_match("lan_ifname", pmtl->nw_t.ifname))	//default wan is vpnc, new spec: vpnc_default_wan for LAN(br0) only.
+		if(vpnc_default_wan && nvram_match("lan_ifname", pmtl->nw_t.ifname)
+#ifdef QCA_SDN_VPN_GUARD
+		   && !deferred
+#endif
+		  )	//default wan is vpnc, new spec: vpnc_default_wan for LAN(br0) only.
 		{
 			snprintf(table, sizeof(table), "%d", IP_ROUTE_TABLE_ID_VPNC_BASE + vpnc_default_wan);
 			snprintf(pref, sizeof(pref), "%d", IP_RULE_PREF_DEFAULT_CONN);
@@ -1801,6 +2023,13 @@ void update_sdn_resolvconf()
 			fp = fopen(path, "w");
 			if(fp)
 			{
+#ifdef QCA_SDN_VPN_GUARD
+				if (qca_vpn_sdn_deferred(pmtl[i].sdn_t.sdn_idx, pmtl[i].sdn_t.vpnc_idx)) {
+					fclose(fp);
+					reload_dnsmasq(pmtl[i].sdn_t.sdn_idx);
+					continue;
+				}
+#endif
 #if defined(RTCONFIG_MULTIWAN_PROFILE)
 				if (pmtl[i].sdn_t.mtwan_idx)
 				{

@@ -25,6 +25,9 @@
  */
 
 #include <rc.h>
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+#include <amvpn_deferred.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -3040,6 +3043,12 @@ start_default_filter(int lanunit)
 		fprintf(fp, "-A %s -j %s\n", SDN_FILTER_FORWARD_CHAIN, SDN_INTERNAL_ACCESS_CHAIN);
 #endif
 
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	if (amvpn_write_deferred_dns(fp, AF_INET)) {
+		fclose(fp);
+		return;
+	}
+#endif
 	fprintf(fp, "COMMIT\n\n");
 	fclose(fp);
 
@@ -3107,6 +3116,7 @@ start_default_filter(int lanunit)
 
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 	amvpn_write_ipv6_killswitch(fp);
+	if (amvpn_write_deferred_dns(fp, AF_INET6)) { fclose(fp); return; }
 #endif
 	fprintf(fp, "COMMIT\n\n");
 	fclose(fp);
@@ -6156,6 +6166,15 @@ TRACE_PT("write wl filter\n");
 
 	// extra filter
 	write_extra_filter(fp);
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	if (amvpn_write_deferred_dns(fp, AF_INET)) {
+		fclose(fp);
+#ifdef RTCONFIG_IPV6
+		if (fp_ipv6) fclose(fp_ipv6);
+#endif
+		return;
+	}
+#endif
 
 	fprintf(fp, "COMMIT\n\n");
 	if (fp) fclose(fp);
@@ -6173,6 +6192,7 @@ TRACE_PT("write wl filter\n");
 		write_extra_filter6(fp_ipv6);
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 		amvpn_write_ipv6_killswitch(fp_ipv6);
+		if (amvpn_write_deferred_dns(fp_ipv6, AF_INET6)) { fclose(fp_ipv6); return; }
 #endif
 
 		fprintf(fp_ipv6, "COMMIT\n\n");
@@ -7966,6 +7986,15 @@ TRACE_PT("write wl filter\n");
 
 	// extra filter
 	write_extra_filter(fp);
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+	if (amvpn_write_deferred_dns(fp, AF_INET)) {
+		fclose(fp);
+#ifdef RTCONFIG_IPV6
+		if (fp_ipv6) fclose(fp_ipv6);
+#endif
+		return;
+	}
+#endif
 
 	fprintf(fp, "COMMIT\n\n");
 	if (fp) fclose(fp);
@@ -7983,6 +8012,7 @@ TRACE_PT("write wl filter\n");
 		write_extra_filter6(fp_ipv6);
 #if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
 		amvpn_write_ipv6_killswitch(fp_ipv6);
+		if (amvpn_write_deferred_dns(fp_ipv6, AF_INET6)) { fclose(fp_ipv6); return; }
 #endif
 
 		fprintf(fp_ipv6, "COMMIT\n\n");

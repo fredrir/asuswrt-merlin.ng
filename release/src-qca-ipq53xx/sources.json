@@ -68212,7 +68212,9 @@
     "release/src/router/libovpn/openvpn_setup.c",
     "release/src/router/shared/scripts.c",
     "release/src/router/rc/openvpn.c",
-    "release/src/router/rc/wireguard.c"
+    "release/src/router/rc/wireguard.c",
+    "release/src/router/libovpn/amvpn_deferred.c",
+    "release/src/router/libovpn/amvpn_deferred.h"
   ],
   "overlay_files": [
     "release/src/asustools/mktail",
@@ -82127,7 +82129,8 @@
     "release/src/router/zlib/zlib.map",
     "release/src/router/zlib/zlib.pc.in",
     "release/src/router/zlib/zutil.c",
-    "release/src/router/zlib/zutil.h"
+    "release/src/router/zlib/zutil.h",
+    "release/src/router/shared/qca_vpn_deferred.h"
   ],
   "platform_files": [
     "asustools/addver",

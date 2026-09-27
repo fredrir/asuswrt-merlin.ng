@@ -57,7 +57,8 @@ def prepare(root):
     print('Host kernel:', os.uname().release, ';', run('ip', '-Version').stdout.strip(),
           ';', run('iptables-nft', '--version').stdout.strip(), flush=True)
     shutil.copytree('/firmware', root, symlinks=True)
-    for name in ('tmp/etc', 'tmp/var/run', 'jffs/openvpn', 'dev', 'harness'):
+    # Production init creates /var/lock before routing services acquire locks.
+    for name in ('tmp/etc', 'tmp/var/run', 'tmp/var/lock', 'jffs/openvpn', 'dev', 'harness'):
         (root / name).mkdir(parents=True, exist_ok=True)
     shutil.copytree('/firmware/rom/etc', root / 'tmp/etc', symlinks=True, dirs_exist_ok=True)
     # A native shell can launch native tools from QEMU without a global binfmt handler.
@@ -65,6 +66,7 @@ def prepare(root):
     copy_native(root, '/bin/busybox', '/bin/grep')
     copy_native(root, '/sbin/ip', '/usr/sbin/ip')
     copy_native(root, '/usr/sbin/xtables-nft-multi', '/usr/sbin/iptables')
+    copy_native(root, '/usr/sbin/xtables-nft-multi', '/usr/sbin/iptables-restore')
     copy_native(root, '/usr/sbin/xtables-nft-multi', '/usr/sbin/ip6tables')
     copy_native(root, '/usr/sbin/xtables-nft-multi', '/usr/sbin/ip6tables-restore')
     shutil.copytree('/usr/lib/x86_64-linux-gnu/xtables', root / 'usr/lib/x86_64-linux-gnu/xtables')

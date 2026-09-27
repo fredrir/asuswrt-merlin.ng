@@ -19,7 +19,13 @@ FILES = ['release/src/router/libovpn/' + name for name in (
     'amvpn_routing.c', 'amvpn_routing.h', 'openvpn_config.c', 'openvpn_config.h',
     'openvpn_control.c', 'openvpn_control.h', 'openvpn_options.c', 'openvpn_setup.c',
 )] + ['release/src/router/shared/scripts.c',
-      'release/src/router/rc/openvpn.c', 'release/src/router/rc/wireguard.c']
+      'release/src/router/rc/openvpn.c', 'release/src/router/rc/wireguard.c',
+      'release/src/router/rc/vpnc_fusion.c']
+QCA_RUNTIME_FILES = {
+    'release/src/router/libovpn/amvpn_routing.c',
+    'release/src/router/libovpn/amvpn_routing.h',
+    'release/src/router/rc/vpnc_fusion.c',
+}
 FEATURES = ('RTCONFIG_IPV6', 'RTCONFIG_MULTILAN_CFG', 'RTCONFIG_WIREGUARD', 'RTCONFIG_AUTO_WANPORT')
 RC_FEATURES = ('RTCONFIG_VPN_FUSION', 'RTCONFIG_VPN_FUSION_MERLIN')
 PLATFORMS = {
@@ -71,7 +77,7 @@ def main():
             subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', '--filter=blob:none',
                             'origin', revision], cwd=repo, check=True)
             for name in FILES:
-                git_source(repo, revision, prefix + name, fetch=True)
+                git_source(repo, revision, ('' if name.endswith('/rc/vpnc_fusion.c') else prefix) + name, fetch=True)
     results = []
     for name in FILES:
         upstream = git_source(repo, args.base, name)
@@ -87,118 +93,23 @@ def main():
                 raise ValueError('Unexpected upstream parser diagnostic; review the baseline')
             upstream = upstream.replace(before, after)
             adjustments.append('Correct the residual-state diagnostic format/argument mismatch')
-        qca = git_source(repo, args.qca_base, 'release/src-qca-ipq53xx/source-overlay/' + name)
-        if name.endswith('/amvpn_routing.c'):
-            # QCA commits converted Fusion policy alongside its NVRAM SDN
-            # mappings and publishes later file saves atomically.
-            before = "\tif (datalen < 0) {\n\t\tbuffer[0] = '\\0';"
-            after = ("\tif (datalen < 0) {\n"
-                     '\t\tif (errno == ENOENT && nvram_match("qca_merlin_vpn_migrated", "1"))\n'
-                     '\t\t\tstrlcpy(buffer, nvram_safe_get("vpndirector_rulelist"), bufferlen);\n'
-                     "\t\telse\n\t\tbuffer[0] = '\\0';")
-            if qca.count(before) != 1:
-                raise ValueError('Unexpected QCA policy reader baseline')
-            qca = qca.replace(before, after)
-            before = '''int amvpn_set_policy_rules(char* buffer)
-{
-	char filename[128];
-
-	if (!d_exists(OVPN_FS_PATH))
-		mkdir(OVPN_FS_PATH, S_IRWXU);
-
-	snprintf(filename, sizeof(filename), "%s/vpndirector_rulelist", OVPN_FS_PATH);
-	if (f_write(filename, buffer, strlen(buffer), 0, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) < 0)
-		return -1;
-
-	return 0;
-}'''
-            after = '''int amvpn_set_policy_rules(char* buffer)
-{
-	char filename[128], temporary[160];
-	const char *next = buffer;
-	size_t left = strlen(buffer);
-	ssize_t written;
-	int fd = -1, dir = -1, created = 0, result = -1, saved_errno;
-
-	if (mkdir(OVPN_FS_PATH, S_IRWXU) && errno != EEXIST)
-		return -1;
-	dir = open("/jffs", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-	if (dir < 0)
-		return -1;
-	if (fsync(dir))
-		goto done;
-	close(dir);
-	dir = open(OVPN_FS_PATH, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-	if (dir < 0)
-		return -1;
-	snprintf(filename, sizeof(filename), "%s/vpndirector_rulelist", OVPN_FS_PATH);
-	snprintf(temporary, sizeof(temporary), "%s/.vpndirector_rulelist.XXXXXX", OVPN_FS_PATH);
-	fd = mkstemp(temporary);
-	if (fd < 0)
-		goto done;
-	created = 1;
-	if (fchmod(fd, S_IRUSR | S_IWUSR))
-		goto done;
-	while (left) {
-		written = write(fd, next, left);
-		if (written < 0 && errno == EINTR)
-			continue;
-		if (written <= 0) {
-			if (!written) errno = EIO;
-			goto done;
-		}
-		next += written;
-		left -= written;
-	}
-	if (fsync(fd))
-		goto done;
-	if (close(fd)) {
-		fd = -1;
-		goto done;
-	}
-	fd = -1;
-	if (rename(temporary, filename) || fsync(dir))
-		goto done;
-	result = nvram_unset("vpndirector_rulelist");
-done:
-	saved_errno = errno;
-	if (fd >= 0) close(fd);
-	if (created) unlink(temporary);
-	close(dir);
-	errno = saved_errno;
-	return result;
-}'''
-            if qca.count(before) != 1:
-                raise ValueError('Unexpected QCA policy writer baseline')
-            qca = qca.replace(before, after)
-            qca_adjustments.append('Committed migration policy fallback until a complete atomic JFFS save')
-            before = '''						if ((rgw == OVPN_RGW_POLICY && pmtl[i].sdn_t.vpnc_idx == vpnc_idx) ||
-						    (rgw == OVPN_RGW_ALL && pmtl[i].sdn_t.vpnc_idx == 0)) {
-'''
-            after = before + '''							if (rgw == OVPN_RGW_POLICY)
-								snprintf(prio_str, sizeof(prio_str), "%d", VPNDIR_PRIO_KS_SDN);
-'''
-            if qca.count(before) != 1:
-                raise ValueError('Unexpected QCA OpenVPN SDN guard baseline')
-            qca = qca.replace(before, after)
-            before = '''				for (i = 1; i < mtl_sz; ++i) {	// Skip first (Default) SDN
-					if (pmtl[i].sdn_t.vpnc_idx == vpnc_idx) {
-						eval("ip", "rule", "add", "from", "all", "priority", prio_str,  "iif", pmtl[i].nw_t.ifname, "prohibit");'''
-            after = before.replace('\t\t\t\t\t\teval(',
-                                   '\t\t\t\t\t\tsnprintf(prio_str, sizeof(prio_str), "%d", VPNDIR_PRIO_KS_SDN);\n'
-                                   '\t\t\t\t\t\teval(')
-            if qca.count(before) != 1:
-                raise ValueError('Unexpected QCA WireGuard SDN guard baseline')
-            qca = qca.replace(before, after)
-            qca_adjustments.append('Assigned SDN guards use their own priority, preserving Director/global guard ownership')
+        qca = git_source(repo, args.qca_base,
+                         ('' if name.endswith('/rc/vpnc_fusion.c') else
+                          'release/src-qca-ipq53xx/source-overlay/') + name)
+        if name in QCA_RUNTIME_FILES:
+            qca_adjustments.append('Changed QCA routing/default behavior requires separate compiled runtime validation; QCA token comparison omitted')
         current = (repo / name).read_text()
         checks = 0
         rejected = 0
+        runtime_profiles = 0
         features = FEATURES + (RC_FEATURES if '/rc/' in name else ())
         for platform, definitions in PLATFORMS.items():
             for flags in itertools.product((False, True), repeat=len(features)):
                 selected = definitions + [name for name, enabled in zip(features, flags) if enabled]
                 expected = qca if platform == 'ipq53xx' else upstream
+                if platform == 'ipq53xx' and name in QCA_RUNTIME_FILES:
+                    runtime_profiles += 1
+                    continue
                 if (name.endswith('/rc/openvpn.c') and platform == 'ipq53xx'
                         and 'RTCONFIG_VPN_FUSION_MERLIN' not in selected):
                     diagnostic = '#error "RT-BE90U VPN variant requires RTCONFIG_VPN_FUSION_MERLIN"'
@@ -215,12 +126,14 @@ done:
                 checks += 1
         results.append({'file': name, 'profiles_checked': checks,
                         'invalid_profiles_rejected': rejected,
+                        'qca_profiles_requiring_runtime_validation': runtime_profiles,
                         'upstream_sha256': original_hash, 'upstream_adjustments': adjustments,
                         'ipq53xx_adjustments': qca_adjustments})
     print(json.dumps({'base': args.base, 'qca_base': args.qca_base,
                       'files': results, 'comparisons_passed': sum(r['profiles_checked'] for r in results),
                       'invalid_profiles_rejected': sum(r['invalid_profiles_rejected'] for r in results),
-                      'scope': 'C tokens with includes removed; not a full other-model compile'}, indent=2))
+                      'qca_profiles_requiring_runtime_validation': sum(r['qca_profiles_requiring_runtime_validation'] for r in results),
+                      'scope': 'Non-QCA and unaffected QCA C tokens with includes removed; changed QCA routing/default files explicitly omitted and require runtime validation; not a full other-model compile'}, indent=2))
 
 
 if __name__ == '__main__':

@@ -39,6 +39,9 @@ def main():
                   ('wg-import', 'run-wg-import-test.sh', [], 'basic')],
         'network': [('network', 'run-vpn-network-test.sh', [], 'net'),
                     ('sdn-refresh', 'run-sdn-refresh-test.sh', [], 'net'),
+                    ('sdn-default', 'run-sdn-default-test.sh', [], 'net'),
+                    ('sdn-concurrency', 'run-sdn-concurrency-test.sh', [], 'net'),
+                    ('deferred-migration', 'run-deferred-migration-test.sh', [], 'net'),
                     ('wg-export', 'run-wg-export-test.sh', [], 'net'),
                     ('wg-tunnel', 'run-wg-tunnel-test.sh', [], 'tunnel')],
         'openvpn': [('tunnel-' + mode, 'run-vpn-tunnel-test.sh', ['--mode', mode], 'tunnel')
