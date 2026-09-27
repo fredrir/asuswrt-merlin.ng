@@ -5,8 +5,10 @@ sources. It is based on `master-3006` at
 `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`. It imports the previously tested
 dev14 port (`0dd6c693e2f12bebde29d38b1cd6b0934cce5cad`) and labels this first
 native build `58138-rtbe90u-dev15-vpn`. Dev17 consolidates VPN, rc wrapper and
-script-hook code into the shared 3006 source tree. Dev18 repairs OpenVPN and WireGuard profile-reset service dispatch. The current
-dev19 candidate adds conservative, one-time Fusion profile and policy migration.
+script-hook code into the shared 3006 source tree. Dev18 repairs OpenVPN and
+WireGuard profile-reset service dispatch. Dev19 adds conservative, one-time
+Fusion profile and policy migration; the current dev20 candidate repairs
+policy-save persistence and publication failures.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -387,7 +389,7 @@ firmware checksums and all 150,610 input records were verified against local
 dev18. Its separate rebuild is 59,050,293 bytes, SHA-256
 `42d9136c4801742add54e958eb133fe7c973a065e27ded44fa6bb064223dadef`.
 The [dev18 GT-BE98 default/ROG builds](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36286495996)
-are still running; prior dev17 results cover the unchanged non-QCA common code.
+both passed, including artifact upload.
 
 A separate synthetic migration probe links the actual `rc/format.o` and
 packaged libraries. It confirms an upgrade problem in dev18: retained ASUS
@@ -459,5 +461,51 @@ HTTP apply does not mark fallback retirement for NVRAM commit, and the existing
 in-place policy writer can leave a partial file after failure that masks the
 preserved fallback. The migration fixture supplies its own caller commit and
 only tests failures before truncation, so it does not establish those paths.
-Dev20 will repair both with actual apply integration coverage and failed-write
-checks around atomic file publication. Dev19 remains an experimental checkpoint.
+Dev20 repairs both with actual apply integration coverage and failed-write
+checks around atomic file publication, as described below. Dev19 remains an experimental checkpoint.
+
+
+## Dev20: durable policy retirement and atomic saves
+
+Policy-only Apply now marks removal of a nonempty migration fallback as an
+NVRAM modification after a successful save. The existing apply handler therefore
+commits that removal. Later file-only edits do not add unnecessary NVRAM commits.
+
+On QCA, policy saves use a private mode-0600 temporary file, complete checked
+writes and file sync before atomic rename. Failed writes, sync, close or rename
+before publication preserve the existing policy file, or leave an absent file
+absent so the migration fallback remains readable. If directory sync fails after
+rename, the complete new file may already be visible while the fallback remains
+committed; this boundary is explicitly tested. Physical flash durability and
+power-loss behavior remain unverified.
+
+The expanded migration fixture passes 133 ARM process invocations, including
+write/partial-write/zero-write, parent/file/directory sync, close and rename
+faults. A new fixture logs into the unmodified packaged HTTP daemon and posts
+real policy-only Apply requests inside a container with loopback networking only.
+Its five scenarios verify failed-save behavior, committed fallback retirement,
+later empty saves, fresh-process policy reads after file loss, and a first empty
+save while a nonempty fallback exists. The real HTTP/library chain reaches QCA's external `nvram commit` dispatch;
+synthetic persistence is recorded at that boundary. Other service/process calls
+are substituted.
+
+Both defects were reproduced against preserved dev19: real HTTP Apply skipped
+the commit, and an injected direct-write failure published an empty file that
+masked the intact fallback. These are separate from the original migration
+fixture's manually committed save path. The new HTTP fixture is included in
+hosted basic validation, which now contains six ARM suites.
+
+The local build, image/linkage/content checks, all 14 selected VPN/HTTP suites,
+script/config/event fixture, 25 helper tests and 2,144 conditional-source
+comparisons (plus 32 expected rejections) passed. All 150,611 inputs are accounted
+for by independent assembly and Git-index checks. Only the version label,
+QCA HTTP apply source and shared policy writer changed among firmware inputs;
+existing non-QCA policy behavior remains unchanged. See
+[dev20 validation evidence](rt-be90u-dev20-validation.json) for exact identities
+and hosted status.
+
+The next software milestone is compiled SDN refresh coverage with real packet
+probes. Current tests apply protection through library calls; they do not verify
+whether SDN refresh removes or restores WireGuard protection, nor safe routing
+and DNS behavior when migration defers incompatible stock indices. Recovery and
+hardware validation remain separate prerequisites; no router state was changed.

@@ -1,35 +1,31 @@
 {
-  "source_commit": "69d834b250bccdae344cb8272f6b48cb677a93dd",
-  "fixture_commit": "69d834b250bccdae344cb8272f6b48cb677a93dd",
+  "source_commit": "fe1fea92d1c14c07535576d94b67ee2f07639e24",
+  "fixture_commit": "fe1fea92d1c14c07535576d94b67ee2f07639e24",
   "base_commit": "920b77f5f92db14717a27abd5c8e1b06ae6c8ec1",
   "image": {
-    "bytes": 59051953,
-    "sha256": "a32dcb30b817da7c92a94a8eac055ac535fa92eb24f18662f2a5239f9b2fe177",
+    "bytes": 59051977,
+    "sha256": "c55713755b7bd942fe1f2b35007ebc14a535d09a284527341a1b7ee94537e572",
     "model": "TUF-BE9400",
-    "timestamp": 1790476573,
+    "timestamp": 1790477291,
     "header_crc32": "valid",
     "payload_crc32": "valid",
     "flash_compatibility": "not established",
     "squashfs_offset": 4322736,
-    "path": "release/src-qca-ipq53xx/image/TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev19-vpn.trx"
+    "path": "release/src-qca-ipq53xx/image/TUF-BE9400_3.0.0.6_102_58138-rtbe90u-dev20-vpn.trx"
   },
   "build": {
     "exit": 0,
-    "mode": "incremental native build after preserving dev18",
+    "mode": "incremental native build after preserving dev19",
     "network": "none",
     "builder": "rt-be90u-ci-build:3006"
   },
   "source_validation": {
     "verified_repository_inputs": 150611,
     "materialized": 150611,
-    "changes_from_dev18": [
+    "changes_from_dev19": [
       "release/src/router/libovpn/amvpn_routing.c",
       "release/src/router/extendno.conf",
-      "release/src/router/rc/Makefile",
-      "release/src/router/rc/format.c",
-      "release/src/router/rc/vpn_migrate.c",
-      "release/src/router/rc/init.c",
-      "release/src/router/shared/vpn_utils.c"
+      "release/src/router/httpd/web.c"
     ]
   },
   "git_input_validation": {
@@ -48,7 +44,7 @@
         "upstream_sha256": "7fbe55406429fb6c8b97693017ce8aa8b8ad8f8db292b6e4d17dcdccd6ba5122",
         "upstream_adjustments": [],
         "ipq53xx_adjustments": [
-          "Committed migration policy fallback until a successful JFFS save"
+          "Committed migration policy fallback until a complete atomic JFFS save"
         ]
       },
       {
@@ -156,6 +152,10 @@
       "exit": 0
     },
     {
+      "test": "httpd-policy",
+      "exit": 0
+    },
+    {
       "test": "ovpn-wrappers",
       "exit": 0
     },
@@ -197,7 +197,7 @@
     }
   ],
   "migration_regression": {
-    "arm_process_invocations_passed": 101,
+    "arm_process_invocations_passed": 133,
     "invalid_conflicting_inputs": 38,
     "compiled_objects": [
       "init.o",
@@ -209,6 +209,8 @@
     "repeat_and_reset_then_migrate": true,
     "write_commit_backup_faults": true,
     "interruption_before_commit_retry": true,
+    "atomic_policy_write_faults": true,
+    "dev19_direct_write_masking_observed": true,
     "unrelated_compatibility_helpers": "observed substitutes",
     "nvram": "disposable file-backed substitute"
   },
@@ -216,42 +218,55 @@
     "cases_passed": 42,
     "valid_requests_repeated": 15
   },
+  "http_policy_regression": {
+    "scenarios_passed": 5,
+    "actual_packaged_httpd": true,
+    "authenticated_apply_and_asp_reader": true,
+    "fresh_process_reload": true,
+    "nvram_and_process_calls": "disposable substitutes; exact external nvram commit dispatch persists the synthetic state",
+    "dev19_expected_failure_observed": true
+  },
   "script_hook_fixture_exit": 0,
   "build_equivalence": [
     {
       "file": "release/src-qca-ipq53xx/linux/linux-5.4.x/.config",
       "sha256": "4b46c9f640842497ff599c144c57af5e8edacc02a8081c4773508a0a931e2b93",
-      "matches_dev18": true
+      "matches_dev19": true
     },
     {
       "file": "release/src/router/rc/openvpn.o",
       "sha256": "8fc14ccfe60c0513e192feb078cb3c3dad3ac1ebe286c4aeba7e1776a5c2b6ed",
-      "matches_dev18": true
+      "matches_dev19": true
     },
     {
       "file": "release/src/router/rc/wireguard.o",
       "sha256": "8c198c3e757922c175b2befe72525647ec1c3b0d28e20a3a2398143a8cfecfd0",
-      "matches_dev18": true
+      "matches_dev19": true
     },
     {
       "file": "release/src/router/rc/services.o",
       "sha256": "7c2daf7438c426b00b1ac437b74a6215647aafe8b2d2123bb1e5475496c5db06",
-      "matches_dev18": true
+      "matches_dev19": true
     },
     {
       "file": "release/src/router/rc/init.o",
       "sha256": "7466dda8e52fb82bdee73b24066018fa41fe75c8c40db1fbccc6ad204ede1a54",
-      "matches_dev18": false
+      "matches_dev19": true
     },
     {
       "file": "release/src/router/rc/format.o",
       "sha256": "5433a0c861cda88a86760781db89e205cebb7e437728b0cb81120ca01cb61476",
-      "matches_dev18": false
+      "matches_dev19": true
     },
     {
       "file": "release/src/router/rc/vpn_migrate.o",
       "sha256": "b4403cf214b88a2f0fbff39a7da497c75662aecb108dc3b8af7a7739b1a4326c",
-      "matches_dev18": false
+      "matches_dev19": true
+    },
+    {
+      "file": "release/src/router/httpd/web.o",
+      "sha256": "b8ef2c8cfccf8a01810818e3394d700d763823bbec01eb913f4a6aa1f1e87113",
+      "matches_dev19": false
     }
   ],
   "linkage_programs": [
@@ -301,25 +316,24 @@
     "http_fixture_absent": true
   },
   "clean_hosted_ci": {
-    "run_id": 36289026601,
-    "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36289026601",
-    "status": "completed",
-    "conclusion": "cancelled",
-    "source_commit": "69d834b250bccdae344cb8272f6b48cb677a93dd",
-    "superseded_by_dev20": true
+    "run_id": 36289833135,
+    "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36289833135",
+    "status": "in_progress",
+    "conclusion": "",
+    "source_commit": "fe1fea92d1c14c07535576d94b67ee2f07639e24"
   },
   "existing_model_ci": {
-    "run_id": 36289026644,
-    "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36289026644",
-    "status": "completed",
-    "conclusion": "cancelled",
-    "source_commit": "69d834b250bccdae344cb8272f6b48cb677a93dd",
-    "superseded_by_dev20": true
+    "run_id": 36289833096,
+    "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36289833096",
+    "status": "in_progress",
+    "conclusion": "",
+    "source_commit": "fe1fea92d1c14c07535576d94b67ee2f07639e24"
   },
   "hardware_tested": false,
   "limitations": [
     "QEMU fixtures use synthetic NVRAM and the host kernel, not whole-router boot or physical flash persistence.",
-    "One NVRAM commit and durable backup are tested with substitutes; physical power-loss recovery is not established.",
+    "NVRAM durability is emulated; actual flash power-loss recovery is not established.",
+    "Directory-sync failure after rename can leave the complete new policy visible while the fallback remains committed; pre-publication failures preserve the prior policy.",
     "Unsupported or conflicting migration input is preserved; safe routing and recovery of deferred configurations remain unvalidated.",
     "Migration covers ordinary OpenVPN/WireGuard profiles and IPv4 policies without interface selectors; other formats need further work.",
     "Reset dispatch coverage substitutes service stop/DPI/hook calls.",
@@ -328,13 +342,8 @@
     "WAN/DNS/firewall/SDN transitions, certificates, add-on lifecycle, recovery and hardware validation remain incomplete."
   ],
   "independent_review": {
-    "converter_boot_reader": "No additional concrete defects identified in scoped code review.",
-    "policy_save_findings": [
-      "Actual policy-only HTTP apply does not mark fallback retirement as modified, so the removal may not be committed.",
-      "In-place policy write failure can leave a partial file that masks the preserved NVRAM fallback."
-    ],
-    "fixture_gap": "Existing policy fixture supplies its own commit and its write failure occurs before truncation.",
-    "planned_fix_candidate": "dev20",
-    "resolved_by_dev20_source_commit": "fe1fea92d1c14c07535576d94b67ee2f07639e24"
+    "policy_save_repairs": "Two reviewers found no remaining concrete blocker in scoped firmware changes and final HTTP fixture.",
+    "source_audit_followup": "Compiled SDN refresh/kill-switch behavior and deferred stock index routing/DNS require packet-level regressions.",
+    "http_fixture_limit": "External nvram commit dispatch persists synthetic state synchronously; real background scheduling and physical flash completion are not tested."
   }
 }

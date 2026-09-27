@@ -474,7 +474,22 @@
   "existing_model_ci": {
     "run_id": 36286495996,
     "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36286495996",
-    "status": "in_progress"
+    "source_commit": "60a2a65c1039f1b4093e3707d7d2641f2158befa",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "Build (gt-be98, src-rt-5.04behnd.4916, default, false)",
+        "job_id": 108528149734,
+        "conclusion": "success",
+        "artifact_upload": "success"
+      },
+      {
+        "name": "Build (gt-be98, src-rt-5.04behnd.4916, rog, false)",
+        "job_id": 108528149755,
+        "conclusion": "success",
+        "artifact_upload": "success"
+      }
+    ]
   },
   "hardware_tested": false,
   "limitations": [
