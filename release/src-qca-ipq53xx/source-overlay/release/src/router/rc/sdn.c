@@ -1715,6 +1715,9 @@ static int _handle_sdn_wan(const MTLAN_T *pmtl, const char *logdrop, const char 
 		 * an old callback must never re-create its routing state. */
 		FREE_MTLAN((void *)current);
 	}
+	/* A corrected fixed assignment may require the SDN owner to replace its
+	 * old lookup before staged network quarantine can safely be released. */
+	if (!result && amvpn_refresh_deferred_locked()) result = -1;
 	file_unlock(lock);
 	return result;
 }

@@ -133,22 +133,26 @@ def exercise(fixture, compile=True):
         states = []
         for _ in range(3):
             invoke(fixture, 'refresh')
-            states.append(net.run('iptables-nft', '-S', 'QCADEFDNS').stdout)
+            states.append((net.run('iptables-nft', '-S').stdout, net.ip('-j', 'rule').stdout))
         assert len(set(states)) == 1, 'Mixed valid/malformed refresh accumulated DNS rules'
-        assert not any(rule['priority'] == 90 for rule in json.loads(net.ip('-j', 'rule').stdout))
+        assert any(rule['priority'] == 90 for rule in json.loads(net.ip('-j', 'rule').stdout))
         checks += 2
-        print('PASS repeated mixed valid/malformed refresh preserves bounded rules and releases new transition guards', flush=True)
+        print('PASS repeated mixed valid/malformed refresh preserves bounded network quarantine', flush=True)
+        packet('192.0.2.21', False, 'unidentifiable malformed source quarantines otherwise unrelated LAN traffic')
         text = invoke(fixture, 'filter4')
         net.run('iptables-nft-restore', input=text)
         dns('192.0.2.20', False, 'mixed-record production filter replacement retains known quarantine')
-        dns('192.0.2.50', True, 'mixed-record production filter replacement preserves independent DNS')
+        dns('192.0.2.50', False, 'mixed-record production filter replacement blocks Director DNS within quarantine')
         # Execute every normal route command; only this explicit failure skips
         # one legacy deletion. A populated old lookup must not escape while
         # that failure leaves temporary protection installed.
+        fixture.env['vpnc_dev_policy_list'] = '<1>192.0.2.20>203.0.113.99>5'
+        invoke(fixture, 'refresh')
         net.ip('route', 'replace', 'default', 'via', '10.3.0.2', 'dev', 'wgc1', 'table', '5')
         net.ip('rule', 'add', 'from', '192.0.2.20', 'table', '5', 'priority', '100')
         fixture.packet('192.0.2.20', '203.0.113.99', 'wgc1')
         checks += 1
+        fixture.env['vpnc_dev_policy_list'] += '<1>not-an-address>>5'
         executable = fixture.root / 'usr/sbin/ip'
         original = fixture.root / 'harness/deferred-fault/ip'
         original.parent.mkdir()

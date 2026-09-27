@@ -228,7 +228,9 @@ def exercise(fixture, regression):
     invoke(fixture, 'defer')
     invoke(fixture, 'refresh', 0)
     packet('malformed default target blocks known LAN', '192.0.2.10', '203.0.113.99', None)
-    packet('malformed default preserves independent WG5', '192.0.2.50', '203.0.113.99', 'wgc5')
+    # An unparseable default now quarantines its whole known LAN until fixed,
+    # including independent VPN clients on that same affected network.
+    packet('malformed default quarantines WG5 client on affected LAN', '192.0.2.50', '203.0.113.99', None)
     # Clear prior owned quarantine before testing a first refresh without SDN
     # rows, so existing main-LAN guards cannot make this control pass.
     if not regression:
