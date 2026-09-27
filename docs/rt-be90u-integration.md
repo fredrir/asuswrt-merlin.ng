@@ -5,8 +5,8 @@ sources. It is based on `master-3006` at
 `920b77f5f92db14717a27abd5c8e1b06ae6c8ec1`. It imports the previously tested
 dev14 port (`0dd6c693e2f12bebde29d38b1cd6b0934cce5cad`) and labels this first
 native build `58138-rtbe90u-dev15-vpn`. Dev17 consolidates VPN, rc wrapper and
-script-hook code into the shared 3006 source tree. The current dev18 candidate
-repairs OpenVPN and WireGuard profile-reset service dispatch.
+script-hook code into the shared 3006 source tree. Dev18 repairs OpenVPN and WireGuard profile-reset service dispatch. The current
+dev19 candidate adds conservative, one-time Fusion profile and policy migration.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -18,7 +18,7 @@ validation have not been performed; the image is not ready to flash.
 | --- | --- |
 | `release/src/` | 68,210 common inputs, including eleven consolidated VPN/script-hook files |
 | `release/src-qca-ipq53xx/linux`, `ipq53xx`, and other platform directories | 68,029 vendor platform inputs from ASUS GPL TUF-BE9400 3.0.0.6.102.58138 |
-| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,912 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
+| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,913 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
 | `release/src-qca-ipq53xx/vendor/` | SDK build glue and auxiliary sources needed to reconstruct the SDK layout |
 | `release/src-qca-ipq53xx/sources.json` | Explicit common/override/platform file lists, SDK aliases, required empty directories and import provenance |
 | `tools/rt-be90u/` | Source assembly, builder provisioning, image/linkage checks and offline runtime fixtures |
@@ -381,18 +381,83 @@ verified all 150,610 inputs; only `rc/services.c` and the version label changed
 from dev17's firmware inputs. The local image is 59,049,729 bytes, with SquashFS
 at byte 4,322,736 and SHA-256
 `f290945bf865039cc38f3a3668a2aa20cd56c4ff32415d2bba36671e67853dfe`.
-Dev18 hosted results are pending. The prior dev17 GT-BE98 results above cover
-the unchanged common firmware sources; further shared/platform integration and
-hardware validation remain outstanding.
+The [clean dev18 hosted build](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36286495995)
+passed, including four basic ARM suites and all 42 reset cases. Downloaded
+firmware checksums and all 150,610 input records were verified against local
+dev18. Its separate rebuild is 59,050,293 bytes, SHA-256
+`42d9136c4801742add54e958eb133fe7c973a065e27ded44fa6bb064223dadef`.
+The [dev18 GT-BE98 default/ROG builds](https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36286495996)
+are still running; prior dev17 results cover the unchanged non-QCA common code.
 
 A separate synthetic migration probe links the actual `rc/format.o` and
-packaged libraries. It confirms a remaining upgrade problem: retained ASUS
+packaged libraries. It confirms an upgrade problem in dev18: retained ASUS
 `vpnc_clientlist` entries can restore OpenVPN autostart and WireGuard enable
 flags during `adjust_vpnc_config`, including after a profile reset. Init still
 calls this compatibility handler. Stock Fusion profile indices also differ from
 Merlin's fixed SDN mapping: a stock OpenVPN client 1 at index 5 is interpreted as
-Merlin WireGuard client 5. Dev18 does not migrate that retained state. The next
-candidate needs explicit conversion, conflict/rollback handling and repeated
-compatibility-pass tests before persistent-state support can be claimed. See
+Merlin WireGuard client 5. Dev18 does not migrate that retained state. Dev19 adds the scoped
+conversion and compatibility-pass tests described below. See
 the [dev18 evidence](rt-be90u-dev18-validation.json) for the synthetic input and
 observed outputs. No router boot or configuration was changed for this probe.
+
+
+## Dev19: conservative Fusion configuration migration
+
+The QCA boot compatibility handler now plans a one-time conversion of ordinary
+OpenVPN and WireGuard Fusion profiles. It copies descriptions and OpenVPN
+credentials, translates IPv4 device policy to VPN Director, translates SDN and
+default-WAN references to Merlin's fixed indices, and preserves unrelated
+profiles with their positionally aligned PPTP options. The profile reader no
+longer rewrites OpenVPN/WireGuard enable settings from retained Fusion records.
+
+All changed NVRAM values, policy and the completion marker are committed
+together. Before writing, the converter saves the original values in a private
+mode-0600 `/jffs/openvpn/fusion-migration.backup`; it never overwrites a different
+backup. Converted policy is read from committed NVRAM while the JFFS VPN Director
+file is absent. An existing file takes precedence, including an explicit empty
+file. The library unsets the fallback on save, but follow-up review found that
+the HTTP caller does not reliably commit that removal; see the dev19 gaps below. Migration does not
+rewrite certificate/key files or custom configurations.
+
+Conversion is deliberately limited. It accepts ordinary 7–12-field profile
+records, including current UI origin metadata, and IPv4 address/CIDR policies
+without interface selectors. Conflicting existing Merlin settings, unsupported ordinary-profile variants,
+provider slot conflicts or references to retained profiles, ambiguous records, IPv6/MAC policy,
+missing active-client configuration, or unwritable backup/state defer the whole
+conversion and retain the original settings. Explicitly disabled or reset
+profiles are not silently re-enabled. Deferred configurations still need manual
+resolution and broader routing validation; preservation alone does not establish
+safe routing during a real upgrade.
+
+The new ARM fixture links the actual compiled `init.o`, `format.o` and
+`vpn_migrate.o` against the packaged libraries and defaults. Its 101 process
+invocations cover the compatibility handler, ordinary and provider profile
+readers, all five client slots, repeated conversion, reset then conversion,
+fresh-process reload, 38 invalid/conflicting inputs, setter/commit failures,
+backup sync/link failures, non-regular backups, an interruption before commit,
+and policy fallback/save behavior. Other compatibility helpers are observed
+substitutes. File-backed synthetic NVRAM does not establish physical flash
+atomicity, whole-router boot order, or recovery from an actual power loss.
+
+The local build, image/linkage checks, all 13 selected VPN suites, script/config/
+event fixture, 25 helper tests and 2,144 conditional-source comparisons (plus
+32 expected rejections) passed. An independent assembly and Git-index audit
+account for all 150,611 inputs, including the new converter. Shared source
+checks separately account for the QCA-only policy fallback; non-QCA behavior
+remains equal to the upstream baseline under the checked profiles, apart from
+the documented residual-state diagnostic correction in `openvpn_options.c`.
+See [dev19 validation evidence](rt-be90u-dev19-validation.json) for source and
+image identities, hosted status and the limits of these checks.
+
+Broader WAN/DNS/firewall/SDN transitions, deferred migration formats, certificate
+and add-on lifecycle support, IPv6 policy limitations, recovery and hardware
+validation remain outstanding. The image is still not ready to flash.
+
+
+Follow-up independent review found two dev19 policy-save gaps: a policy-only
+HTTP apply does not mark fallback retirement for NVRAM commit, and the existing
+in-place policy writer can leave a partial file after failure that masks the
+preserved fallback. The migration fixture supplies its own caller commit and
+only tests failures before truncation, so it does not establish those paths.
+Dev20 will repair both with actual apply integration coverage and failed-write
+checks around atomic file publication. Dev19 remains an experimental checkpoint.

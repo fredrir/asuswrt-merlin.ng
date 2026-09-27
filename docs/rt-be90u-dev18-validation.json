@@ -430,7 +430,46 @@
   "clean_hosted_ci": {
     "run_id": 36286495995,
     "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36286495995",
-    "status": "in_progress"
+    "source_commit": "60a2a65c1039f1b4093e3707d7d2641f2158befa",
+    "conclusion": "success",
+    "image": {
+      "bytes": 59050293,
+      "sha256": "42d9136c4801742add54e958eb133fe7c973a065e27ded44fa6bb064223dadef",
+      "model": "TUF-BE9400",
+      "timestamp": 1790475959,
+      "header_crc32": "valid",
+      "payload_crc32": "valid",
+      "flash_compatibility": "not established",
+      "squashfs_offset": 4323456
+    },
+    "verified_input_records": 150610,
+    "input_records_match_local_dev18": true,
+    "downloaded_firmware_checksum_verified": true,
+    "common_source_comparisons": 2144,
+    "invalid_profile_rejections": 32,
+    "helper_tests_passed": 25,
+    "packaged_linkage_passed": true,
+    "script_config_event_fixture_passed": true,
+    "basic_arm_suites": [
+      {
+        "test": "config",
+        "exit": 0
+      },
+      {
+        "test": "vpn-reset",
+        "exit": 0
+      },
+      {
+        "test": "ovpn-wrappers",
+        "exit": 0
+      },
+      {
+        "test": "wg-import",
+        "exit": 0
+      }
+    ],
+    "reset_cases_passed": 42,
+    "scope": "Clean build, source/image/linkage/script checks and four basic ARM suites; tunnel/network suites remain local"
   },
   "existing_model_ci": {
     "run_id": 36286495996,
