@@ -5520,9 +5520,8 @@ stop_ddns(void)
 	if (pids("phddns"))
 		killall("phddns", SIGINT);
 	if (nvram_match("ddns_tunbkrnet", "1")) {
-		int evalRet = eval("iptables-restore", "/tmp/filter_rules");
-		rule_apply_checking("services", __LINE__, "/tmp/filter_rules", evalRet);
-		run_custom_script("firewall-start", 0, get_wan_ifname(wan_primary_ifunit()), NULL);
+		/* The saved filter may predate VPN quarantine or other live updates. */
+		eval("iptables", "-t", "filter", "-D", "INPUT", "-p", "icmp", "-s", "66.220.2.74", "-j", "ACCEPT");
 		nvram_unset("ddns_tunbkrnet");
 	}
 #ifdef RTCONFIG_OPENVPN

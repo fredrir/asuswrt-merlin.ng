@@ -315,7 +315,7 @@ define platformKernelConfig
 			$(call scfg, $(1), CONFIG_DUMP_PREV_OOPS_MSG_BUF_LEN, 0x8000); \
 		fi; \
 		if [ "$(IPV6SUPP)" = "y" ]; then \
-			$(call scfg, $(1), CONFIG_IPV6_MULTIPLE_TABLES, n); \
+			$(call scfg, $(1), CONFIG_IPV6_MULTIPLE_TABLES, y); \
 		fi; \
 	fi;
 	if [ "$(USB)" = "" ]; then \

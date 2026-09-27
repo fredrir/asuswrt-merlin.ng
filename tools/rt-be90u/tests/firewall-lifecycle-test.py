@@ -186,6 +186,51 @@ class Fixture(broad.Fixture):
         assert result.returncode == 0, (operation, result.returncode)
 
 
+def ddns_stop(f, cached_filters=(True, False)):
+    for cached_filter in cached_filters:
+        f.setup('')
+        # Cache an older filter, then install a newer guest quarantine.
+        cache = f.root / 'tmp/filter_rules'
+        cache.write_text(net.run('iptables-nft-save', '-t', 'filter').stdout)
+        if not cached_filter:
+            cache.unlink()
+        f.publish('vpnc_dev_policy_list', '<1>>>bad>br1')
+        f.invoke('refresh')
+        rule = ('INPUT', '-p', 'icmp', '-s', '66.220.2.74', '-j', 'ACCEPT')
+        net.run('iptables-nft', '-I', *rule)
+        f.publish('ddns_tunbkrnet', '1')
+        before = net.run('iptables-nft', '-S').stdout
+        expected = before.replace('-A INPUT -s 66.220.2.74/32 -p icmp -j ACCEPT\n', '')
+        assert expected != before
+        for family in (4, 6):
+            f.dns('DDNS setup blocks guest DNS ' + str(family), 'br1', family, False)
+            f.dns('DDNS setup allows LAN DNS ' + str(family), 'br0', family, True)
+        actors = Actors(f)
+        try:
+            actors.start('ddns', 'stop_ddns')
+
+            def probe(e):
+                if e[1] == 'COMMAND_AFTER' and Actors.mutation(e[3]):
+                    for family in (4, 6):
+                        f.dns('DDNS stop boundary retains guest DNS ' + str(family), 'br1', family, False)
+            actors.drain(('ddns',), probe)
+        finally:
+            actors.close()
+        f.require('DDNS stop preserves all unrelated live filter rules',
+                  net.run('iptables-nft', '-S').stdout == expected)
+        f.require('DDNS stop removes its ICMP exception',
+                  net.run('iptables-nft', '-C', *rule, check=False).returncode != 0)
+        assert (f.root / 'tmp/lifecycle-nvram/ddns_tunbkrnet').read_text() == ''
+        # A repeated stop, including a flag whose rule was already removed by
+        # a full reload, must preserve quarantine too.
+        f.invoke('stop_ddns')
+        f.publish('ddns_tunbkrnet', '1')
+        f.invoke('stop_ddns')
+        for family in (4, 6):
+            f.dns('DDNS stop retains guest DNS ' + str(family), 'br1', family, False)
+            f.dns('DDNS stop preserves LAN DNS ' + str(family), 'br0', family, True)
+
+
 def stale_restore(f, operation):
     f.setup('<1>>>bad>br1')
     f.invoke('refresh')
@@ -466,6 +511,7 @@ def main():
     fixture = Fixture(args.root, args.expect_regression)
     try:
         if args.operation == 'race':
+            ddns_stop(fixture)
             for operation in ('default', 'normal', 'filter2'):
                 stale_restore(fixture, operation)
             disabled_ipv6(fixture)
@@ -476,6 +522,10 @@ def main():
             service_restart(fixture)
             parallel_writers(fixture)
             normal_ipv6_guard(fixture)
+        elif args.operation == 'ddns-case':
+            ddns_stop(fixture)
+        elif args.operation == 'ddns-cached-case':
+            ddns_stop(fixture, (True,))
         elif args.operation == 'normalguard-case':
             normal_ipv6_guard(fixture)
         elif args.operation == 'filter2-case':

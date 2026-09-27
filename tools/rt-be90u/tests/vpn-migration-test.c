@@ -17,7 +17,8 @@
 
 extern int migrate_qca_vpn_config(void);
 extern void config_format_compatibility_handler(void);
-static struct { char *name, *value; } store[2048];
+extern void init_router_defaults(int restore_defaults);
+static struct { char *name, *value; } store[16384];
 static size_t used;
 static int active, sets, commits, injected, hooks, syncs;
 static int policy_operation, policy_fd = -1, policy_writes, policy_created, policy_published;
@@ -188,6 +189,10 @@ int main(int argc, char **argv)
 	fault = argc > 2 ? argv[2] : "";
 	active = 1;
 	if (!strcmp(argv[1], "migrate")) result = migrate_qca_vpn_config();
+	else if (!strcmp(argv[1], "defaults") || !strcmp(argv[1], "factory-defaults")) {
+		init_router_defaults(!strcmp(argv[1], "factory-defaults"));
+		nvram_commit();
+	}
 	else if (!strcmp(argv[1], "boot")) {
 		config_format_compatibility_handler();
 #ifdef RTCONFIG_NOTIFICATION_CENTER

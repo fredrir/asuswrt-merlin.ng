@@ -1,4 +1,6 @@
 import importlib.util
+import gzip
+import lzma
 from pathlib import Path
 import struct
 import unittest
@@ -10,7 +12,16 @@ image = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(image)
 
 
-def firmware(model=b'TUF-BE9400', arch=22, payload=b'example firmware payload'):
+def kernel_payload(config=None):
+    if config is None:
+        config = ''.join(name + '=y\n' for name in image.VPN_KERNEL_OPTIONS)
+    kernel = b'kernel prefix' + b'IKCFG_ST' + gzip.compress(config.encode()) + b'IKCFG_ED'
+    return lzma.compress(kernel, format=lzma.FORMAT_ALONE) + b'squashfs payload'
+
+
+def firmware(model=b'TUF-BE9400', arch=22, payload=None):
+    if payload is None:
+        payload = kernel_payload()
     name = bytes((3, 0, 0, 6)) + model.ljust(12, b'\0') + bytes(16)
     header = image.HEADER.pack(0x27051956, 0, 1, len(payload), 0x40080000,
                                0x40080000, zlib.crc32(payload), 5, arch, 2, 3, name)
@@ -26,6 +37,17 @@ class ImageChecks(unittest.TestCase):
     def test_rejects_other_boards_even_with_valid_checksums(self):
         with self.assertRaisesRegex(ValueError, 'product ID'):
             image.check_image(firmware(model=b'TUF-BE6500'))
+
+    def test_rejects_kernel_without_ipv6_policy_routing_even_with_valid_checksums(self):
+        config = ('CONFIG_IPV6=y\nCONFIG_IP_MULTIPLE_TABLES=y\nCONFIG_FIB_RULES=y\n'
+                  '# CONFIG_IPV6_MULTIPLE_TABLES is not set\n')
+        with self.assertRaisesRegex(ValueError, 'CONFIG_IPV6_MULTIPLE_TABLES'):
+            image.check_image(firmware(payload=kernel_payload(config)))
+
+    def test_rejects_kernel_without_embedded_configuration(self):
+        payload = lzma.compress(b'kernel without IKCONFIG', format=lzma.FORMAT_ALONE)
+        with self.assertRaisesRegex(ValueError, 'Missing embedded kernel configuration'):
+            image.check_image(firmware(payload=payload))
 
     def test_rejects_other_cpu_architectures(self):
         with self.assertRaisesRegex(ValueError, 'AArch64'):

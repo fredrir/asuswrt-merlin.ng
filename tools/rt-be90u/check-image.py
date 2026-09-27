@@ -2,8 +2,10 @@
 """Check RT-BE90U uImage structure; this does not establish flash safety."""
 
 import argparse
+import gzip
 import hashlib
 import json
+import lzma
 from pathlib import Path
 import struct
 import zlib
@@ -11,6 +13,30 @@ import zlib
 
 HEADER = struct.Struct('>7I4B32s')
 LINUX_VOLUME_BYTES = 0x0500B000
+VPN_KERNEL_OPTIONS = ('CONFIG_IPV6', 'CONFIG_IP_MULTIPLE_TABLES',
+                      'CONFIG_IPV6_MULTIPLE_TABLES', 'CONFIG_FIB_RULES')
+
+
+def check_kernel_config(payload):
+    # Inspect the shipped kernel, not the build input or the test host kernel.
+    # SquashFS follows the LZMA stream, so decompress only the first stream.
+    try:
+        decoder = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE)
+        kernel = decoder.decompress(payload)
+        if not decoder.eof:
+            raise ValueError('Truncated LZMA kernel')
+        start = kernel.find(b'IKCFG_ST')
+        end = kernel.find(b'IKCFG_ED', start + 8)
+        if start < 0 or end < 0:
+            raise ValueError('Missing embedded kernel configuration')
+        config = gzip.decompress(kernel[start + 8:end]).decode('ascii')
+    except (lzma.LZMAError, OSError, EOFError, UnicodeError) as error:
+        raise ValueError('Invalid embedded kernel configuration: ' + str(error)) from error
+    values = dict(line.split('=', 1) for line in config.splitlines() if line.startswith('CONFIG_') and '=' in line)
+    missing = [name for name in VPN_KERNEL_OPTIONS if values.get(name) != 'y']
+    if missing:
+        raise ValueError('Kernel lacks required VPN policy routing: ' + ', '.join(missing))
+    return {name: values[name] for name in VPN_KERNEL_OPTIONS}
 
 
 def check_image(data):
@@ -44,6 +70,7 @@ def check_image(data):
         'timestamp': timestamp,
         'header_crc32': 'valid',
         'payload_crc32': 'valid',
+        'kernel_config': check_kernel_config(data[HEADER.size:]),
         'flash_compatibility': 'not established',
     }
 

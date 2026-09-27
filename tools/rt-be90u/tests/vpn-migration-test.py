@@ -237,10 +237,43 @@ def main():
                   'vpn_client%d_addr' % unit: 'vpn.fixture.example',
                   'sdn_rl': sdn, 'vpnc_dev_policy_list': '', 'unrelated': 'keep'}
         seed(source)
+        initialized, _, _ = call('defaults')
+        assert 'vpn_clientx_eas' not in initialized
+        assert initialized['lan_ipaddr'] and len(initialized) > len(source)
         state, report, _ = call('boot')
         assert state['vpn_clientx_eas'] == '%d,' % unit and state['wgc%d_enable' % unit] == '0'
         assert state['vpn_client%d_desc' % unit] == 'C' and state['wgc%d_desc' % unit] == 'W'
         assert report['commits'] == 1 and state['vpnc_clientlist'] == ''
+
+    # Actual router-default initialization must preserve explicit disable edits
+    # while leaving a missing enable list available for stock migration.
+    for eas in ('', '2,'):
+        source = dict(base, vpn_clientx_eas=eas)
+        seed(source)
+        initialized, _, _ = call('defaults')
+        assert initialized['vpn_clientx_eas'] == eas
+        state, report, _ = call()
+        assert state == initialized and report['result'] == -1 and report['commits'] == 0
+    source = dict(base, vpnc_dev_policy_list='<1>192.0.2.10>>5>br1')
+    del source['vpn_clientx_eas']
+    seed(source)
+    for _ in range(2):
+        initialized, _, _ = call('defaults')
+        assert 'vpn_clientx_eas' not in initialized
+        state, report, _ = call()
+        assert state == initialized and report['result'] == -1 and report['commits'] == 0
+    corrected = dict(state, vpnc_dev_policy_list=base['vpnc_dev_policy_list'])
+    seed(corrected)
+    call('defaults')
+    state, report, _ = call('boot')
+    assert state['vpn_clientx_eas'] == '1,' and report['commits'] == 1
+    for source, operation in (({}, 'defaults'),
+                              ({'qca_merlin_vpn_migrated': '1'}, 'defaults'),
+                              (base, 'factory-defaults')):
+        seed(source)
+        state, _, _ = call(operation)
+        assert state['vpn_clientx_eas'] == ''
+    print('PASS initialized defaults, explicit disable edits, deferred reboot/retry and factory defaults', flush=True)
     for source in ({}, {'vpnc_clientlist': ''}, {'vpnc_clientlist': 'Keep>PPTP>example>>>0>5'}):
         seed(source); state, report, _ = call('boot')
         assert state == source and report['commits'] == 0 and not backup.exists()

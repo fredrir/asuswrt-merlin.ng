@@ -191,6 +191,7 @@ int main(int argc, char **argv)
 	else if (!strcmp(argv[1], "ipv6guard")) amvpn_refresh_ipv6_killswitch();
 	else {
 		assert(!strcmp(argv[1], "restart_firewall") || !strcmp(argv[1], "stop_firewall") ||
+		       !strcmp(argv[1], "stop_ddns") ||
 		       !strcmp(argv[1], "start_vpnrouting1"));
 		nvram_set("rc_service", argv[1]);
 		nvram_set("rc_service_pid", "123");

@@ -154,7 +154,8 @@ static int profiles(struct vpn_migration *m)
 		++m->found;
 		if (id > 5) {
 			char key[32];
-			/* An explicit disagreement may be a user edit after an earlier port. */
+			/* Boot defaults leave this absent while conversion is pending.
+			 * An existing value, including empty, may be a user edit. */
 			if (eas && m->enabled[unit] != active) goto fail;
 			m->enabled[unit] = active;
 			snprintf(prefix, sizeof(prefix), "vpn_client%d_", unit);

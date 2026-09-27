@@ -2604,6 +2604,47 @@ static void post_restore_defaults(void)
 }
 #endif
 
+/* Apply router defaults before the compatibility migrations run. */
+void init_router_defaults(int restore_defaults)
+{
+	struct nvram_tuple *t;
+	int skiplan = nvram_match("ci", "1");
+
+	/* Restore defaults */
+	for (t = router_defaults; t->name; t++) {
+#if 1	/* TODO: define RTCONFIG_XXX for this */
+		/* Skip change setting when run auto test */
+		if (skiplan) {
+			if (strcmp(t->name, "lan_ipaddr") == 0)
+				continue;
+		}
+#endif
+#if defined(RTCONFIG_AMAS) && defined(RTCONFIG_MSSID_PRELINK)
+		if (nvram_get(t->name) &&
+			(strcmp(t->name, "plk_cap_subunit") == 0 || strcmp(t->name, "plk_re_subunit") == 0))
+			continue;
+#endif
+#if defined(RTCONFIG_ASUSCTRL)
+		if ((!strcmp(t->name, "asusctrl_flags")
+		  || !strcmp(t->name, "asusctrl_chg_sku")
+		  || !strcmp(t->name, "territory_code"))
+		 && nvram_get(t->name))
+			continue;
+#endif
+#if defined(RTCONFIG_SOC_IPQ53XX) && defined(RTCONFIG_VPN_FUSION_MERLIN)
+		/* Preserve absence until Fusion migration can distinguish the boot
+		 * default from an explicit empty (disabled) Merlin enable list.
+		 * A deferred conversion must retain this distinction across boots. */
+		if (!restore_defaults && !strcmp(t->name, "vpn_clientx_eas") &&
+		    *nvram_safe_get("vpnc_clientlist") &&
+		    !nvram_match("qca_merlin_vpn_migrated", "1"))
+			continue;
+#endif
+		if (restore_defaults || !nvram_get(t->name))
+			nvram_set(t->name, t->value);
+	}
+}
+
 /* ASUS use erase nvram to reset default only */
 static int
 restore_defaults(void)
@@ -2614,9 +2655,6 @@ restore_defaults(void)
 	int unit, commit = 0;
 #ifdef RTCONFIG_DHDAP
 	int i;
-#endif
-#if 1	/* TODO: define RTCONFIG_XXX for this */
-	int skiplan = nvram_match("ci", "1");
 #endif
 #ifdef LINUX26
 	FILE *fp = NULL;
@@ -2713,30 +2751,7 @@ restore_defaults(void)
 #endif
 #endif
 
-	/* Restore defaults */
-	for (t = router_defaults; t->name; t++) {
-#if 1	/* TODO: define RTCONFIG_XXX for this */
-		/* Skip change setting when run auto test */
-		if (skiplan) {
-			if (strcmp(t->name, "lan_ipaddr") == 0)
-				continue;
-		}
-#endif
-#if defined(RTCONFIG_AMAS) && defined(RTCONFIG_MSSID_PRELINK)
-		if (nvram_get(t->name) &&
-			(strcmp(t->name, "plk_cap_subunit") == 0 || strcmp(t->name, "plk_re_subunit") == 0))
-			continue;
-#endif
-#if defined(RTCONFIG_ASUSCTRL)
-		if ((!strcmp(t->name, "asusctrl_flags")
-		  || !strcmp(t->name, "asusctrl_chg_sku")
-		  || !strcmp(t->name, "territory_code"))
-		 && nvram_get(t->name))
-			continue;
-#endif
-		if (restore_defaults || !nvram_get(t->name))
-			nvram_set(t->name, t->value);
-	}
+	init_router_defaults(restore_defaults);
 #ifdef RTCONFIG_TCODE
 	/* restore tcode-based defaults */
 	config_tcode(1);
