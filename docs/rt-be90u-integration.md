@@ -8,8 +8,9 @@ native build `58138-rtbe90u-dev15-vpn`. Dev17 consolidates VPN, rc wrapper and
 script-hook code into the shared 3006 source tree. Dev18 repairs OpenVPN and
 WireGuard profile-reset service dispatch. Dev19 adds conservative, one-time
 Fusion profile and policy migration. Dev20 repairs policy-save persistence and
-publication failures; the current dev21 candidate preserves IPv4 VPN protection
-during SDN refresh.
+publication failures; dev21 preserves IPv4 VPN protection during SDN refresh.
+Dev22 extends default/unassigned SDN and concurrent-transition handling and
+quarantines identifiable traffic when stock VPN migration defers.
 
 This is a proposed platform layout for maintainer review. It does not add the
 model to the supported-model list or release workflow. Recovery and hardware
@@ -19,9 +20,9 @@ validation have not been performed; the image is not ready to flash.
 
 | Location | Build role and provenance |
 | --- | --- |
-| `release/src/` | 68,210 common inputs, including eleven consolidated VPN/script-hook files |
+| `release/src/` | 68,212 common inputs, including consolidated VPN/script-hook files and the QCA deferred-migration helper |
 | `release/src-qca-ipq53xx/linux`, `ipq53xx`, and other platform directories | 68,029 vendor platform inputs from ASUS GPL TUF-BE9400 3.0.0.6.102.58138 |
-| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,913 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
+| `release/src-qca-ipq53xx/source-overlay/release/src/` | 13,914 differing or additional common-tree inputs, including QCA-specific rc/shared/httpd integration, package versions and UI |
 | `release/src-qca-ipq53xx/vendor/` | SDK build glue and auxiliary sources needed to reconstruct the SDK layout |
 | `release/src-qca-ipq53xx/sources.json` | Explicit common/override/platform file lists, SDK aliases, required empty directories and import provenance |
 | `tools/rt-be90u/` | Source assembly, builder provisioning, image/linkage checks and offline runtime fixtures |
@@ -140,15 +141,16 @@ sparse checkout of the required source trees and does not retain credentials.
 The job provisions Ubuntu build packages from scratch, checks out the pinned
 QCA toolchain revision and builds with Docker networking disabled. It rejects
 an existing build directory or collected image, and uses no source/build cache.
-It runs helper tests, 2,144 common-source comparisons, 32 invalid-profile
+It runs helper tests, 2,560 common-source comparisons, 32 invalid-profile
 rejections, native input checks, uImage identity/CRC/size checks, extracted
 rc/httpd/OpenVPN linkage checks and the source-compiled script/config/event
-fixture. The full QEMU VPN, browser,
-Entware and hardware suites remain separate from this initial CI job.
+fixture and six basic ARM configuration/service/HTTP suites. The common-source
+checker explicitly leaves 96 changed QCA profiles to compiled runtime validation.
+Network/tunnel, browser, Entware and hardware suites remain separate from CI.
 
 The common-source checker normally requires local baseline objects. In shallow
 CI clones, `--fetch-baselines` explicitly fetches the two recorded commits and
-their twenty-two relevant blobs before running the comparisons without lazy
+the twelve selected files at both baselines before running comparisons without lazy
 fetching. This is test provisioning; the firmware build still consumes only
 checked-out inputs.
 
@@ -539,9 +541,61 @@ rejections passed. Firmware
 input changes from dev20 are limited to the version, QCA `sdn.c` and shared
 `amvpn_routing.c`; checked non-QCA token behavior remains unchanged. See
 [dev21 validation evidence](rt-be90u-dev21-validation.json) for exact identities
-and hosted status.
+and hosted results. The clean hosted build and six basic ARM suites passed;
+downloaded firmware and all 150,611 input records were verified. Both GT-BE98
+variants also passed. SDN packet, network and tunnel coverage remains local.
 
-Next coverage must address default-LAN/unassigned SDNs, multiple SDNs and
-concurrent callers, then safe routing and DNS when migration defers incompatible
-stock indices. Broader WAN/DNS/firewall transitions, IPv6 policy limitations,
+Dev22 extends this coverage to default-LAN/unassigned SDNs, multiple SDNs,
+concurrent callers and identifiable deferred stock VPN bindings, as described below.
+Broader WAN/DNS/firewall transitions, IPv6 policy limitations,
 recovery and hardware validation remain outstanding. No router state was changed.
+
+## Dev22: default SDNs, concurrent transitions and deferred migration
+
+Default-LAN and unassigned SDNs now reconcile through the selected SDN, including
+assignment removal. SDN WAN/VPN refresh reloads the current SDN after acquiring
+the routing lock; the `vpnrouting` routing/DNS update holds the same lock.
+Changed Director rule sets install protection before retiring the old rules.
+Kernel rule protocol metadata distinguishes generations at the same priority.
+Ambiguous custom rules cause cleanup to stop with existing protection retained.
+
+Unresolved stock VPN indices are kept separate from explicit Merlin client
+identities. Identifiable affected SDNs and policy selectors receive routing
+guards; identified source/interface scopes also receive UDP/TCP port-53 guards.
+Protection is reconciled after migration or configuration correction; earlier
+guards can remain while another malformed record prevents safe cleanup.
+Dedicated deferred SDN resolver instances receive an empty configuration and
+cannot start Stubby or append alternate VPN/custom resolvers. The main shared
+resolver remains available to unaffected clients. The tested Fusion policy/DNS
+callbacks cannot reinterpret an old OpenVPN index as an unrelated WireGuard client.
+Raw policy parsing retains full source/destination CIDRs and interface selectors;
+cleanup uses the exact captured kernel address when legacy rules contain host bits.
+No migration settings are rewritten by this quarantine.
+
+| Local validation | Result |
+| --- | --- |
+| Packaged ARM suites | 18 passed |
+| Default/unassigned/multiple SDNs | 91 checks at 6 command boundaries |
+| Concurrent callbacks and rule replacement | 263 packet checks at 37 command boundaries; 4 scenarios |
+| Deferred routing/DNS and migration retry | 50 migration controls and 57 firewall checks |
+| Source assembly and Git index | 150,614 inputs verified |
+| Helpers/common sources | 25 tests; 2,560 comparisons; 32 rejected profiles |
+
+The common-source checker explicitly excludes 96 changed QCA profiles from token
+equivalence claims; compiled runtime tests cover the selected QCA behavior.
+Preserved dev21 reproduces default-SDN, concurrency and deferred-routing failures.
+The new tests use actual compiled rc entry points and packaged libraries, real
+POSIX locks, command barriers and native kernel packet forwarding in isolated
+containers. Filter replacement uses the production shared emitter; full firewall
+and cold-start orchestration remain unverified. The packaged ARM `ip` probe checks
+protocol-attribute encoding; kernel operations use native host tools because QEMU
+does not support the firmware binary's full netlink path.
+
+See [dev22 validation evidence](rt-be90u-dev22-validation.json) for exact source,
+image, runtime counts and hosted status. Broader blocking for unidentifiable
+malformed policies or an IPv4 client's unknown IPv6 identity remains undecided.
+Destination-only policies cannot identify that client's requests to the shared
+router resolver. Port-53 guards also block cached/local answers for affected
+sources; encrypted DNS classification and IPv6 VPN routing are not established.
+Broader WAN/firewall/service transitions, recovery and hardware testing remain
+outstanding. No router state was changed.

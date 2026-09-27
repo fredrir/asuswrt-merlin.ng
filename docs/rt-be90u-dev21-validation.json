@@ -459,16 +459,78 @@
   "clean_hosted_ci": {
     "run_id": 36311168298,
     "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36311168298",
-    "status": "in_progress",
-    "conclusion": "",
-    "source_commit": "8abdf06c9776458cf809e5f8333306a3a41933ca"
+    "source_commit": "8abdf06c9776458cf809e5f8333306a3a41933ca",
+    "conclusion": "success",
+    "image": {
+      "bytes": 59052433,
+      "sha256": "153292894bbb593bc8ac1e192d99402ea4fe0e0bc8464d03267a048f715543f5",
+      "model": "TUF-BE9400",
+      "timestamp": 1790505792,
+      "header_crc32": "valid",
+      "payload_crc32": "valid",
+      "flash_compatibility": "not established",
+      "squashfs_offset": 4322772
+    },
+    "verified_input_records": 150611,
+    "input_records_match_local_dev21": true,
+    "downloaded_firmware_checksum_verified": true,
+    "common_source_comparisons": 2144,
+    "invalid_profile_rejections": 32,
+    "helper_tests_passed": 25,
+    "packaged_linkage_passed": true,
+    "script_config_event_fixture_passed": true,
+    "basic_arm_suites": [
+      {
+        "test": "config",
+        "exit": 0
+      },
+      {
+        "test": "vpn-reset",
+        "exit": 0
+      },
+      {
+        "test": "vpn-migration",
+        "exit": 0
+      },
+      {
+        "test": "httpd-policy",
+        "exit": 0
+      },
+      {
+        "test": "ovpn-wrappers",
+        "exit": 0
+      },
+      {
+        "test": "wg-import",
+        "exit": 0
+      }
+    ],
+    "reset_cases_passed": 42,
+    "migration_arm_invocations": 133,
+    "http_policy_scenarios": 5,
+    "scope": "Clean build, source/image/linkage/script checks and six basic ARM suites; SDN packet, tunnel and network suites remain local",
+    "status": "completed"
   },
   "existing_model_ci": {
     "run_id": 36311168331,
     "url": "https://github.com/fredrir/asuswrt-merlin.ng/actions/runs/36311168331",
-    "status": "in_progress",
-    "conclusion": "",
-    "source_commit": "8abdf06c9776458cf809e5f8333306a3a41933ca"
+    "source_commit": "8abdf06c9776458cf809e5f8333306a3a41933ca",
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "Build (gt-be98, src-rt-5.04behnd.4916, default, false)",
+        "job_id": 108597242842,
+        "conclusion": "success",
+        "artifact_upload": "success"
+      },
+      {
+        "name": "Build (gt-be98, src-rt-5.04behnd.4916, rog, false)",
+        "job_id": 108597242969,
+        "conclusion": "success",
+        "artifact_upload": "success"
+      }
+    ]
   },
   "hardware_tested": false,
   "limitations": [
